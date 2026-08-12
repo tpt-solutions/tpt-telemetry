@@ -1,0 +1,12 @@
+// Common Event Format (CEF) header schema.
+//
+// CEF lines look like:
+//   CEF:0|Vendor|Product|1.0|100|Authentication failed|5|src=10.0.0.5
+// Fields are pipe-delimited; string captures backtrack to the correct delimiters.
+// The trailing `extension` key/value block is captured as a single string.
+
+format CEF {
+  pattern: "CEF:%{version:int}|%{vendor:string}|%{product:string}|%{dev_version:string}|%{signature:string}|%{name:string}|%{severity:int}|%{extension:string}";
+  coerce severity to enum { EMERGENCY, ALERT, CRITICAL, ERROR, WARNING, NOTICE, INFO, DEBUG };
+}
+

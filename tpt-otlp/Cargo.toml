@@ -1,0 +1,26 @@
+[package]
+name = "tpt-otlp"
+description = "Internal typed-log to OTLP log record mapping and exporters (gRPC + HTTP/JSON)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tpt-telemetry-compiler = { workspace = true }
+serde = { workspace = true }
+serde_json = "1"
+thiserror.workspace = true
+ureq = { version = "2.9", features = ["json"] }
+# Optional gRPC transport (OpenTelemetry OTLP protocol + tonic).
+opentelemetry-proto = { version = "0.7", features = ["grpc-tonic"], optional = true }
+tonic = { version = "0.12", optional = true }
+tokio = { version = "1", features = ["rt", "macros", "net", "time"], optional = true }
+
+[features]
+default = []
+grpc = ["dep:opentelemetry-proto", "dep:tonic", "dep:tokio"]
+
+[dev-dependencies]

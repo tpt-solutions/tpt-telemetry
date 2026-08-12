@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+    "tpt-telemetry-schema",
+    "tpt-grok-engine",
+    "tpt-telemetry-compiler",
+    "tpt-telemetry-core",
+    "tpt-syslog-server",
+    "tpt-inference",
+    "tpt-otlp",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["TPT Solutions"]
+repository = "https://github.com/tpt-solutions/tpt-telemetry"
+rust-version = "1.85"
+
+[workspace.dependencies]
+tpt-telemetry-schema = { path = "tpt-telemetry-schema", version = "0.1.0" }
+tpt-grok-engine = { path = "tpt-grok-engine", version = "0.1.0" }
+tpt-telemetry-compiler = { path = "tpt-telemetry-compiler", version = "0.1.0" }
+tpt-telemetry-core = { path = "tpt-telemetry-core", version = "0.1.0" }
+tpt-syslog-server = { path = "tpt-syslog-server", version = "0.1.0" }
+tpt-inference = { path = "tpt-inference", version = "0.1.0" }
+
+pest = "2.7"
+pest_derive = "2.7"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }

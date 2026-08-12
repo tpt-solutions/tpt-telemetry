@@ -1,0 +1,21 @@
+[package]
+name = "tpt-inference"
+description = "LLM-assisted inference of .tpt-log schemas from raw log samples"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tpt-telemetry-schema = { workspace = true }
+tpt-telemetry-compiler = { workspace = true }
+serde.workspace = true
+serde_json = "1"
+thiserror.workspace = true
+ureq = { version = "2.9", features = ["json"] }
+
+[[bin]]
+name = "tpt-inference"
+path = "src/main.rs"

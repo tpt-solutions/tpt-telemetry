@@ -1,0 +1,7 @@
+%ASA-6-302013: Built inbound TCP connection 10.0.0.5/443 to inside/10.0.0.9/51234
+%ASA-3-106001: Inbound TCP connection denied from 203.0.113.7/51324 to outside/198.51.100.3/22
+%ASA-4-106023: Deny tcp src inside:10.0.0.5/1234 dst outside:8.8.8.8/53 by access-group
+<134>2024-03-11T08:22:01Z edge-fw01 sshd
+<165>2024-03-11T08:22:05Z db-prod01 postgres
+CEF:0|CyberArk|Vault|12.6|100|Authentication failed|5|src=10.0.0.5 dst=10.0.0.9
+CEF:0|Vendor|Product|1.0|200|Port scan detected|8|src=198.51.100.3 act=blocked

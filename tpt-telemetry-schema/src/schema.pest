@@ -1,0 +1,32 @@
+// .tpt-log schema grammar for pest.
+// See spec.txt section 4 for the canonical example.
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" | COMMENT }
+COMMENT    = _{ "//" ~ (!NEWLINE ~ ANY)* }
+
+schema = { SOI ~ format_block* ~ EOI }
+
+format_block = {
+    "format" ~ ident ~ "{" ~ stmt* ~ "}"
+}
+
+stmt = _{ pattern_decl | extract_decl | coerce_decl | redact_decl }
+
+pattern_decl = { "pattern" ~ ":" ~ string ~ ";" }
+extract_decl = { "extract" ~ ident ~ "from" ~ ident ~ "using" ~ "regex" ~ string ~ ";" }
+coerce_decl  = { "coerce"  ~ ident ~ "to" ~ coerce_target ~ ";" }
+
+coerce_target = { enum_decl | type_name }
+enum_decl = { "enum" ~ "{" ~ ident ~ ("," ~ ident)* ~ "}" }
+
+redact_decl = { "redact" ~ ident ~ "with" ~ redact_mode ~ ";" }
+redact_mode = { "hash" | "mask" }
+
+type_name = {
+    "int" | "uint" | "float" | "bool" | "string"
+    | "ip" | "ipv4" | "ipv6" | "mac" | "timestamp"
+}
+
+ident  = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+string = ${ "\"" ~ inner ~ "\"" }
+inner  = { (!"\"" ~ ANY)* }

@@ -1,4 +1,13 @@
 /target
+**/*.rs.bk
 Cargo.lock
-*.pdb
 .DS_Store
+*.swp
+
+# Generated code
+**/src/generated/*.rs
+**/generated.rs
+
+# Editor
+.idea/
+.vscode/

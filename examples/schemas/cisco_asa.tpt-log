@@ -1,0 +1,11 @@
+// Cisco ASA syslog schema (see spec.txt section 4).
+//
+// Native typed captures (`%{field:type}`) are matched zero-copy; the `severity`
+// integer is coerced to a named enum, and the free-text `message` is masked at
+// export time to avoid leaking PII into the downstream SIEM.
+
+format CiscoASA {
+  pattern: "%ASA-%{severity:int}-%{msg_id:int}: %{message:string}";
+  coerce severity to enum { EMERGENCY, ALERT, CRITICAL, ERROR, WARNING, NOTICE, INFO, DEBUG };
+  redact message with mask;
+}

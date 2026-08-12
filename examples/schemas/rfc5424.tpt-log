@@ -1,0 +1,8 @@
+// A small RFC 5424-flavoured syslog schema.
+//
+// `pri` is the facility/severity integer, `timestamp` uses the native timestamp
+// matcher (RFC3339 / ISO8601), and `host`/`app` are delimited by spaces.
+
+format RFC5424 {
+  pattern: "<%{pri:int}>%{timestamp:timestamp} %{host:string} %{app:string}";
+}

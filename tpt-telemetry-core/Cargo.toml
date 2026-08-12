@@ -1,0 +1,17 @@
+[package]
+name = "tpt-telemetry-core"
+description = "Core parsing runtime and streaming reader for tpt-telemetry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tpt-telemetry-schema = { workspace = true }
+tpt-grok-engine = { workspace = true }
+tpt-telemetry-compiler = { workspace = true }
+
+[features]
+alloc-counter = []
