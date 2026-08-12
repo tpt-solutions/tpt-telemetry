@@ -1,0 +1,50 @@
+# tpt-telemetry Design Document
+
+**Project name:** tpt-telemetry  
+**Domain:** Syslog, Legacy Telemetry, and Log Parsing (CEF/LEEF)  
+**License:** MIT OR Apache-2.0  
+
+---
+
+## 1. Summary & Vision
+`tpt-telemetry` is a strongly-typed observability contract and legacy log parser.
+
+Security devices and network gear emit unstructured Syslog, CEF (Common Event Format), or LEEF. Security engineers write thousands of fragile regexes in Splunk/Datadog to extract IP addresses. `tpt-telemetry` turns messy legacy logs into strongly-typed Rust structs using a schema language and AI-assisted inference.
+
+## 2. Design Principles
+- **Schema-Driven Parsing:** Define log formats in a `.tpt-log` schema; the compiler generates zero-allocation parsers.
+- **Grok-Compatible:** Supports standard Grok patterns for easy migration from Logstash/Elasticsearch.
+- **Streaming Architecture:** Parse multi-gigabyte log streams with zero heap allocations per line.
+- **OTLP Native:** Automatically translates parsed, typed logs into OpenTelemetry Protocol (OTLP) payloads.
+
+## 3. Scope & Architecture
+```text
+Raw Syslog/CEF Stream -> tpt-telemetry-core -> Typed Rust Structs -> OTLP Exporter
+.tpt-log Schema -> tpt-telemetry-compiler -> Zero-Copy Parser Engine
+```
+
+### Components
+- `tpt-telemetry-schema`: DSL for defining log formats, field extractions, and type coercions.
+- `tpt-grok-engine`: A highly optimized, SIMD-accelerated Grok pattern matcher.
+- `tpt-syslog-server`: A high-throughput UDP/TCP receiver that handles RFC3164 and RFC5424.
+- `tpt-inference`: An LLM-assisted tool that samples raw logs and suggests `.tpt-log` schemas.
+
+## 4. Schema Example
+```tpt-log
+format CiscoASA {
+  pattern: "%ASA-%{severity:int}-%{msg_id:int}: %{message:string}";
+  
+  extract source_ip from message using regex "\b(?:\d{1,3}\.){3}\d{1,3}\b";
+  coerce severity to enum { EMERGENCY, ALERT, CRITICAL, ERROR, WARNING, NOTICE, INFO, DEBUG };
+}
+```
+
+## 5. Security & Safety
+- **Log Injection Prevention:** Strict sanitization of extracted fields before they are rendered into downstream SIEM queries.
+- **Backpressure:** The UDP/TCP receivers implement kernel-level SO_RXQ_OVFL dropping and ring-buffer backpressure to prevent OOM during log floods.
+- **PII Redaction:** Schema-level annotations to automatically hash or mask emails, IPs, and credit cards before export.
+
+## 6. Acceptance Criteria
+1. Parses 1 million lines per second per core on standard hardware.
+2. Successfully imports and executes standard Elastic Common Schema (ECS) Grok patterns.
+3. Zero heap allocations during the steady-state parsing loop.
