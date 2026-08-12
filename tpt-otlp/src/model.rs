@@ -4,42 +4,48 @@
 //! JSON for the HTTP/JSON transport; the gRPC transport (behind the `grpc`
 //! feature) converts the same model into protobuf via `opentelemetry-proto`.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tpt_telemetry_compiler::{Record, Value};
 
 /// Top-level OTLP logs payload.
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct LogsPayload {
     pub resource_logs: Vec<ResourceLogs>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceLogs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource: Option<Resource>,
     pub scope_logs: Vec<ScopeLogs>,
 }
 
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct Resource {
     pub attributes: Vec<KeyValue>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScopeLogs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<Scope>,
     pub log_records: Vec<LogRecord>,
 }
 
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct Scope {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LogRecord {
     /// Nanoseconds since the Unix epoch, as a string (OTLP/JSON uses string).
     pub time_unix_nano: String,
@@ -54,14 +60,15 @@ pub struct LogRecord {
     pub attributes: Vec<KeyValue>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct KeyValue {
     pub key: String,
     pub value: AnyValue,
 }
 
 /// An OTLP `AnyValue` (one-of). Only the populated variant is serialized.
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AnyValue {
     #[serde(rename = "stringValue", skip_serializing_if = "Option::is_none")]
     pub string_value: Option<String>,
@@ -150,7 +157,7 @@ pub fn record_to_log_record(rec: &Record) -> LogRecord {
         .map(|f| match &f.value {
             Value::Enum(idx) => match idx {
                 0..=1 => 17u32, // EMERGENCY/ALERT
-                2..=3 => 17,     // CRITICAL/ERROR
+                2..=3 => 17,    // CRITICAL/ERROR
                 4 => 13,        // WARNING
                 5 => 11,        // NOTICE
                 6 => 9,         // INFO
@@ -213,8 +220,7 @@ pub fn records_to_payload(records: &[Record], scope_name: &str) -> LogsPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tpt_telemetry_compiler::{CompiledSchema, Value};
-    use tpt_telemetry_schema::parse;
+    use tpt_telemetry_compiler::{parse, CompiledSchema};
 
     #[test]
     fn maps_record_to_otlp() {
@@ -233,9 +239,11 @@ mod tests {
         // Check serialization is valid JSON and round-trips.
         let json = serde_json::to_string(&payload).unwrap();
         let back: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert!(back["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]["severityNumber"]
-            .as_u64()
-            .is_some());
+        assert!(
+            back["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]["severityNumber"]
+                .as_u64()
+                .is_some()
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! `tpt-telemetry-compiler` — `.tpt-log` schema → zero-copy runtime parser.
 //!
-//! The compiler lowers a parsed [`Schema`](tpt_telemetry_schema::Schema) into a
-//! [`CompiledSchema`]: a flat, allocation-free matcher that borrows field values
+//! The compiler lowers a parsed [`Schema`] into a
+//! [`CompiledSchema`], a flat, allocation-free matcher that borrows field values
 //! directly from the input line. It also emits Rust source via [`codegen`] for
 //! golden-file testing and `build.rs` integration.
 //!
@@ -31,7 +31,7 @@ pub mod error;
 pub mod security;
 
 pub use compile::{
-    CompiledFormat, CompiledSchema, MatchCtx, RawMatch, Record, Seg, TypedField, Value, Field,
+    CompiledFormat, CompiledSchema, Field, MatchCtx, RawMatch, Record, Seg, TypedField, Value,
 };
 pub use error::{CompileError, Result};
 

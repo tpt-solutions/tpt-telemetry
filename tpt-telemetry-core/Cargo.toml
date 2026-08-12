@@ -6,6 +6,11 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-telemetry-core"
+readme = "../README.md"
+keywords = ["telemetry", "logs", "parser", "streaming", "zero-alloc"]
+categories = ["parsing", "text-processing", "command-line-utilities"]
 rust-version.workspace = true
 
 [dependencies]
@@ -15,3 +20,14 @@ tpt-telemetry-compiler = { workspace = true }
 
 [features]
 alloc-counter = []
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "e2e_bench"
+harness = false
+
+[[bench]]
+name = "throughput_bench"
+harness = false

@@ -7,8 +7,8 @@
 //! application-level backpressure signal). On Linux the kernel-level
 //! `SO_RXQ_OVFL` drop counter is enabled and surfaced via the stats API.
 
-mod framing;
-mod message;
+pub mod framing;
+pub mod message;
 mod server;
 mod stats;
 

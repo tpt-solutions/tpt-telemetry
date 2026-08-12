@@ -113,4 +113,26 @@ mod tests {
         let s = parse("format X { coerce a to int; }");
         assert!(matches!(s, Err(SchemaError::MissingPattern(_))));
     }
+
+    /// Fuzz-smoke: the parser must never panic on adversarial/garbage input.
+    #[test]
+    fn parser_never_panics_on_garbage() {
+        let cases = [
+            "",
+            "{",
+            "{{{{",
+            "format \u{0}\u{1}\u{2} { pattern: \"",
+            "format X { pattern: \"%{",
+            "format X { pattern: \"%{NOT_CLOSED\"; }",
+            "format X { pattern: \"a\"; } format X { pattern: \"b\"; }",
+            &"a".repeat(1 << 16),
+            "format \u{7f}\u{fffd} { pattern: \"%{IP:ipv4}\"; coerce ipv4 to enum { A }; }",
+            "format X { pattern: \"%{UNKNOWN_PATTERN:field}\"; }",
+            "\u{202e}right-to-left\u{202c} %{IP:x}",
+        ];
+        for c in cases {
+            // Must return Ok or Err, never unwind.
+            let _ = parse(c);
+        }
+    }
 }

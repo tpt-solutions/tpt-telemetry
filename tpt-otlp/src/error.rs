@@ -1,7 +1,5 @@
 //! OTLP export errors.
 
-use std::fmt;
-
 /// Errors produced while mapping or exporting records to OTLP.
 #[derive(Debug, thiserror::Error)]
 pub enum OtlpError {

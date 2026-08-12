@@ -19,6 +19,6 @@ pub mod grpc;
 pub use error::OtlpError;
 pub use exporter::{Exporter, ExporterConfig, Transport};
 pub use model::{
-    records_to_payload, record_to_log_record, value_to_any, AnyValue, KeyValue, LogRecord,
+    record_to_log_record, records_to_payload, value_to_any, AnyValue, KeyValue, LogRecord,
     LogsPayload, Resource, ResourceLogs, Scope, ScopeLogs,
 };

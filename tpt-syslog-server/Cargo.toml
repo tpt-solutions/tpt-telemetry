@@ -6,6 +6,11 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-syslog-server"
+readme = "../README.md"
+keywords = ["syslog", "rfc3164", "rfc5424", "udp", "tcp"]
+categories = ["network-programming", "parsing", "command-line-utilities"]
 rust-version.workspace = true
 
 [dependencies]

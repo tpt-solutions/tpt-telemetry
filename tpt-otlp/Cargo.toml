@@ -6,6 +6,11 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-otlp"
+readme = "../README.md"
+keywords = ["opentelemetry", "otlp", "grpc", "observability", "telemetry"]
+categories = ["network-programming", "data-structures", "command-line-utilities"]
 rust-version.workspace = true
 
 [dependencies]
@@ -15,7 +20,7 @@ serde_json = "1"
 thiserror.workspace = true
 ureq = { version = "2.9", features = ["json"] }
 # Optional gRPC transport (OpenTelemetry OTLP protocol + tonic).
-opentelemetry-proto = { version = "0.7", features = ["grpc-tonic"], optional = true }
+opentelemetry-proto = { version = "0.7", features = ["gen-tonic"], optional = true }
 tonic = { version = "0.12", optional = true }
 tokio = { version = "1", features = ["rt", "macros", "net", "time"], optional = true }
 

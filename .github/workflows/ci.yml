@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Make warnings noisy but do not fail the build here; `clippy` is the gate.
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy (workspace, all targets, all features)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Clippy (fuzz targets)
+        # The fuzz crate is a standalone workspace (nightly + cargo-fuzz), so it
+        # is linted separately here for convenience; the real fuzz run is gated
+        # in the `fuzz` job below.
+        run: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets -- -D warnings
+        continue-on-error: true
+
+  build-test:
+    name: build + test (${{ matrix.os }})
+    # Linux is the primary supported platform (SO_RXQ_OVFL is Linux-only, see
+    # PLATFORMS.md). macOS and Windows widen the build/test matrix but are
+    # secondary — the syslog overflow stat is simply unavailable there.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (default features)
+        run: cargo build --workspace --verbose
+      - name: Test (default features)
+        run: cargo test --workspace --verbose
+      - name: Test zero-alloc gate (tpt-telemetry-core, alloc-counter)
+        run: cargo test -p tpt-telemetry-core --features alloc-counter
+      - name: Build (all features)
+        # Exercises the gated OTLP gRPC transport (tonic/tokio) on every OS.
+        run: cargo build --workspace --all-features --verbose
+
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      # The committed `cargo-audit-baseline.json` records the advisory state at
+      # the 0.1.0 cut (0 vulns / 203 deps, 2026-08-13). Review it whenever the
+      # dependency tree changes rather than silently bumping the baseline.
+
+  fuzz:
+    name: fuzz smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo +nightly install cargo-fuzz --locked
+      - name: Fuzz smoke (schema_parser)
+        working-directory: fuzz
+        run: cargo +nightly fuzz run schema_parser -- -runs=50000
+      - name: Fuzz smoke (grok_engine)
+        working-directory: fuzz
+        run: cargo +nightly fuzz run grok_engine -- -runs=50000
+      - name: Fuzz smoke (syslog_framing)
+        working-directory: fuzz
+        run: cargo +nightly fuzz run syslog_framing -- -runs=50000

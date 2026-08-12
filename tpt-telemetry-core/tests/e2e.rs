@@ -28,11 +28,19 @@ fn cisco_asa_end_to_end() {
         .expect("match");
     assert_eq!(rec.format, "CiscoASA");
     assert_eq!(
-        rec.fields.iter().find(|f| f.name == "severity").unwrap().value,
+        rec.fields
+            .iter()
+            .find(|f| f.name == "severity")
+            .unwrap()
+            .value,
         Value::Enum(6)
     );
     assert_eq!(
-        rec.fields.iter().find(|f| f.name == "msg_id").unwrap().value,
+        rec.fields
+            .iter()
+            .find(|f| f.name == "msg_id")
+            .unwrap()
+            .value,
         Value::Int(302013)
     );
     // message is redacted (masked).
@@ -70,15 +78,27 @@ fn cef_end_to_end() {
         .expect("match");
     assert_eq!(rec.format, "CEF");
     assert_eq!(
-        rec.fields.iter().find(|f| f.name == "vendor").unwrap().value,
+        rec.fields
+            .iter()
+            .find(|f| f.name == "vendor")
+            .unwrap()
+            .value,
         Value::Str("CyberArk")
     );
     assert_eq!(
-        rec.fields.iter().find(|f| f.name == "signature").unwrap().value,
+        rec.fields
+            .iter()
+            .find(|f| f.name == "signature")
+            .unwrap()
+            .value,
         Value::Str("100")
     );
     assert_eq!(
-        rec.fields.iter().find(|f| f.name == "severity").unwrap().value,
+        rec.fields
+            .iter()
+            .find(|f| f.name == "severity")
+            .unwrap()
+            .value,
         Value::Enum(5)
     );
 }
@@ -89,10 +109,7 @@ fn mixed_sample_log_streams_and_dispatches() {
     let rfc = Parser::from_compiled(load("rfc5424.tpt-log"));
     let cef = Parser::from_compiled(load("cef.tpt-log"));
 
-    let path = schema_dir()
-        .join("..")
-        .join("samples")
-        .join("mixed.log");
+    let path = schema_dir().join("..").join("samples").join("mixed.log");
     let data = std::fs::read(&path).expect("read sample log");
 
     let mut r = tpt_telemetry_core::StreamReader::new(std::io::Cursor::new(&data[..]));

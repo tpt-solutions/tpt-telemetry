@@ -47,8 +47,7 @@ pub fn provider_by_name(name: &str) -> Result<Box<dyn InferenceProvider>, Infere
 mod tests {
     use super::*;
 
-    const VALID: &str =
-        "format Sample { pattern: \"%{level:string}: %{message:string}\"; }";
+    const VALID: &str = "format Sample { pattern: \"%{level:string}: %{message:string}\"; }";
     const INVALID: &str = "this is not a schema at all";
 
     #[test]

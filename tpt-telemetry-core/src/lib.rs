@@ -217,7 +217,11 @@ mod tests {
             .unwrap();
         assert_eq!(rec.format, "CiscoASA");
         assert_eq!(
-            rec.fields.iter().find(|f| f.name == "severity").unwrap().value,
+            rec.fields
+                .iter()
+                .find(|f| f.name == "severity")
+                .unwrap()
+                .value,
             Value::Enum(6)
         );
     }

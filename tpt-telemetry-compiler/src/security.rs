@@ -1,4 +1,4 @@
-//! Security & safety helpers: PII redaction (see [`Value`] redaction in
+//! Security & safety helpers: PII redaction (see [`Value`](crate::compile::Value) redaction in
 //! `compile`) and log-injection prevention for downstream SIEM rendering.
 
 /// Characters that must never survive into a rendered SIEM query/field value.
@@ -50,10 +50,9 @@ mod tests {
     fn redaction_masks_pii() {
         use crate::compile::{CompiledSchema, Value};
         use tpt_telemetry_schema::parse;
-        let schema = parse(
-            r#"format Auth { pattern: "%{IP:client} logged in"; redact client with mask; }"#,
-        )
-        .unwrap();
+        let schema =
+            parse(r#"format Auth { pattern: "%{IP:client} logged in"; redact client with mask; }"#)
+                .unwrap();
         let cs = CompiledSchema::compile(&schema).unwrap();
         let rec = cs.parse_line("10.0.0.5 logged in").unwrap();
         let client = rec.fields.iter().find(|f| f.name == "client").unwrap();

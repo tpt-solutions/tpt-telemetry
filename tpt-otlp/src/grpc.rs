@@ -4,7 +4,10 @@
 
 use crate::error::OtlpError;
 use crate::exporter::Exporter;
-use crate::model::{AnyValue as ModelAny, KeyValue as ModelKv, LogRecord as ModelLr, LogsPayload, ResourceLogs as ModelRl, ScopeLogs as ModelSl};
+use crate::model::{
+    AnyValue as ModelAny, KeyValue as ModelKv, LogRecord as ModelLr, LogsPayload,
+    ResourceLogs as ModelRl, ScopeLogs as ModelSl,
+};
 
 use opentelemetry_proto::tonic::common::v1::{
     AnyValue as PlAny, InstrumentationScope, KeyValue as PlKv,
@@ -30,9 +33,7 @@ fn any_to_proto(a: &ModelAny) -> PlAny {
     } else {
         PlAnyValue::StringValue(String::new())
     };
-    PlAny {
-        value: Some(v),
-    }
+    PlAny { value: Some(v) }
 }
 
 fn kv_to_proto(kv: &ModelKv) -> PlKv {

@@ -16,6 +16,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["TPT Solutions"]
 repository = "https://github.com/tpt-solutions/tpt-telemetry"
+homepage = "https://github.com/tpt-solutions/tpt-telemetry"
 rust-version = "1.85"
 
 [workspace.dependencies]
@@ -25,6 +26,7 @@ tpt-telemetry-compiler = { path = "tpt-telemetry-compiler", version = "0.1.0" }
 tpt-telemetry-core = { path = "tpt-telemetry-core", version = "0.1.0" }
 tpt-syslog-server = { path = "tpt-syslog-server", version = "0.1.0" }
 tpt-inference = { path = "tpt-inference", version = "0.1.0" }
+tpt-otlp = { path = "tpt-otlp", version = "0.1.0" }
 
 pest = "2.7"
 pest_derive = "2.7"

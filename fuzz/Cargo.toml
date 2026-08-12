@@ -1,0 +1,39 @@
+[package]
+name = "tpt-telemetry-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+tpt-telemetry-schema = { path = "../tpt-telemetry-schema" }
+tpt-grok-engine = { path = "../tpt-grok-engine" }
+tpt-telemetry-compiler = { path = "../tpt-telemetry-compiler" }
+tpt-telemetry-core = { path = "../tpt-telemetry-core" }
+tpt-syslog-server = { path = "../tpt-syslog-server" }
+
+[[bin]]
+name = "schema_parser"
+path = "fuzz_targets/schema_parser.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "grok_engine"
+path = "fuzz_targets/grok_engine.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "syslog_framing"
+path = "fuzz_targets/syslog_framing.rs"
+test = false
+doc = false
+
+# Standalone workspace so cargo at the repo root does not try to build fuzz
+# targets (which require the nightly toolchain + `cargo fuzz`).
+[workspace]

@@ -35,9 +35,7 @@ fn udp_datagrams() {
     assert_eq!(msgs.len(), 5);
     assert!(msgs.iter().all(|m| m.transport == Transport::Udp));
     assert!(msgs.iter().all(|m| m.framing == Framing::Datagram));
-    assert!(msgs
-        .iter()
-        .any(|m| m.payload.starts_with(b"udp message")));
+    assert!(msgs.iter().any(|m| m.payload.starts_with(b"udp message")));
     server.stop();
 }
 
@@ -49,9 +47,7 @@ fn tcp_non_transparent_lf() {
     let target = server.local_tcp_addr();
 
     let mut stream = TcpStream::connect(target).unwrap();
-    stream
-        .write_all(b"first line\nsecond line\n")
-        .unwrap();
+    stream.write_all(b"first line\nsecond line\n").unwrap();
     // Let the reader process.
     std::thread::sleep(Duration::from_millis(100));
 

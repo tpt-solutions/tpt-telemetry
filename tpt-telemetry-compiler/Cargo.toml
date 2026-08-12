@@ -6,6 +6,11 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-telemetry-compiler"
+readme = "../README.md"
+keywords = ["codegen", "parser", "telemetry", "logs", "zero-copy"]
+categories = ["parsing", "development-tools", "text-processing"]
 rust-version.workspace = true
 
 [dependencies]
@@ -15,3 +20,8 @@ thiserror.workspace = true
 serde = { workspace = true }
 
 [dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "compile_bench"
+harness = false

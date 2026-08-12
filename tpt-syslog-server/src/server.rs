@@ -199,13 +199,13 @@ fn udp_recv_loop(
                     };
                     deliver(&tx, stats, msg);
                 }
-            Err(e)
-                if e.kind() == io::ErrorKind::WouldBlock
-                    || e.kind() == io::ErrorKind::TimedOut =>
+                Err(e)
+                    if e.kind() == io::ErrorKind::WouldBlock
+                        || e.kind() == io::ErrorKind::TimedOut =>
                 {
                     thread::sleep(Duration::from_millis(read_timeout));
                 }
-            Err(_) => break,
+                Err(_) => break,
             }
         }
     }
@@ -231,11 +231,10 @@ fn tcp_accept_loop(
                 });
             }
             Err(e)
-                if e.kind() == io::ErrorKind::WouldBlock
-                    || e.kind() == io::ErrorKind::TimedOut =>
-                {
-                    thread::sleep(Duration::from_millis(read_timeout));
-                }
+                if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut =>
+            {
+                thread::sleep(Duration::from_millis(read_timeout));
+            }
             Err(_) => break,
         }
     }
@@ -272,8 +271,8 @@ fn tcp_conn_loop(
                 }
             }
             Err(e)
-                if e.kind() == io::ErrorKind::WouldBlock
-                    || e.kind() == io::ErrorKind::TimedOut => {}
+                if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut => {
+            }
             Err(_) => break,
         }
     }
@@ -329,10 +328,15 @@ fn enable_rxq_ovfl(fd: std::os::unix::io::RawFd) {
 }
 
 #[cfg(target_os = "linux")]
-fn udp_recv_loop_linux(fd: std::os::unix::io::RawFd, tx: SyncSender<Message>, stats: &Arc<Stats>, stop: &Arc<AtomicBool>) {
+fn udp_recv_loop_linux(
+    fd: std::os::unix::io::RawFd,
+    tx: SyncSender<Message>,
+    stats: &Arc<Stats>,
+    stop: &Arc<AtomicBool>,
+) {
     use libc::{
         c_int, c_void, cmsghdr, iovec, msghdr, recvmsg, socklen_t, CMSG_DATA, CMSG_FIRSTHDR,
-        CMSG_NXTHDR, SCM_RXQ_OVFL, SOL_SOCKET, MSG_DONTWAIT,
+        CMSG_NXTHDR, MSG_DONTWAIT, SCM_RXQ_OVFL, SOL_SOCKET,
     };
     use std::os::unix::io::AsRawFd;
 

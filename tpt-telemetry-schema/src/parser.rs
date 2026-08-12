@@ -1,4 +1,4 @@
-//! Pest-based parser for the `.tpt-log` schema, producing the [`ast::Schema`].
+//! Pest-based parser for the `.tpt-log` schema, producing the [`Schema`].
 
 use crate::ast::*;
 use crate::patterns;
@@ -27,7 +27,7 @@ pub enum SchemaError {
     MissingPattern(String),
 }
 
-/// Parse a `.tpt-log` schema source string into an [`ast::Schema`].
+/// Parse a `.tpt-log` schema source string into an [`Schema`].
 pub fn parse(input: &str) -> Result<Schema, SchemaError> {
     let pairs =
         SchemaParser::parse(Rule::schema, input).map_err(|e| SchemaError::Parse(e.to_string()))?;

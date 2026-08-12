@@ -134,9 +134,15 @@ mod tests {
 
     #[test]
     fn non_transparent_lf() {
-        let frames = decode_all(TcpFraming::NonTransparent, &[b"msg one\nmsg two\n", b"msg three\n"]);
+        let frames = decode_all(
+            TcpFraming::NonTransparent,
+            &[b"msg one\nmsg two\n", b"msg three\n"],
+        );
         let got: Vec<&[u8]> = frames.iter().map(|v| v.as_slice()).collect();
-        assert_eq!(got, vec![&b"msg one"[..], &b"msg two"[..], &b"msg three"[..]]);
+        assert_eq!(
+            got,
+            vec![&b"msg one"[..], &b"msg two"[..], &b"msg three"[..]]
+        );
     }
 
     #[test]
@@ -158,5 +164,42 @@ mod tests {
     fn auto_detects_lf() {
         let frames = decode_all(TcpFraming::Auto, &[b"no digits here\n"]);
         assert_eq!(frames, vec![&b"no digits here"[..]]);
+    }
+
+    /// Fuzz-smoke: feed pseudo-random bytes in varying chunk sizes across all
+    /// framing modes; decoding must never panic and every frame must be a
+    /// byte-subset of the input.
+    #[test]
+    fn framing_never_panics_on_random_streams() {
+        let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+        let mut rng = || {
+            // xorshift64
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for _ in 0..256 {
+            let len = (rng() % 512) as usize;
+            let mut data = Vec::with_capacity(len);
+            for _ in 0..len {
+                data.push((rng() % 256) as u8);
+            }
+            for mode in [
+                TcpFraming::Auto,
+                TcpFraming::OctetCounting,
+                TcpFraming::NonTransparent,
+            ] {
+                let mut d = TcpDecoder::new(mode);
+                let mut frames = Vec::new();
+                for chunk in data.chunks(1 + (rng() % 4) as usize) {
+                    d.push(chunk, &mut frames);
+                }
+                d.flush(&mut frames);
+                for f in &frames {
+                    assert!(f.len() <= data.len());
+                }
+            }
+        }
     }
 }

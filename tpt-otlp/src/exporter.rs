@@ -137,22 +137,17 @@ impl Exporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{records_to_payload, AnyValue, KeyValue, LogsPayload, ResourceLogs, ScopeLogs, LogRecord};
-    use tpt_telemetry_compiler::{CompiledSchema, Record, Value};
-    use tpt_telemetry_schema::parse;
+    use crate::model::{records_to_payload, LogsPayload};
+    use tpt_telemetry_compiler::{parse, CompiledSchema, Record, Value};
 
     // Build a tiny payload and assert the HTTP serializer produces valid JSON
     // without hitting the network.
     #[test]
     fn http_payload_serializes() {
-        let schema = parse(
-            r#"format Auth { pattern: "%{ip:ipv4} login"; }"#,
-        )
-        .unwrap();
+        let schema = parse(r#"format Auth { pattern: "%{ip:ipv4} login"; }"#).unwrap();
         let cs = CompiledSchema::compile(&schema).unwrap();
         let rec = cs.parse_line("10.0.0.5 login").unwrap();
         let payload = records_to_payload(std::slice::from_ref(&rec), "test");
-        let exporter = Exporter::new(ExporterConfig::default());
         // Serialize through the same path the HTTP exporter uses.
         let body = serde_json::to_vec(&payload).unwrap();
         let _: LogsPayload = serde_json::from_slice(&body).unwrap();
@@ -162,7 +157,10 @@ mod tests {
             ..Default::default()
         };
         let e = Exporter::new(cfg);
-        assert!(matches!(e.export(std::slice::from_ref(&rec)), Err(OtlpError::GrpcFeatureDisabled)));
+        assert!(matches!(
+            e.export(std::slice::from_ref(&rec)),
+            Err(OtlpError::GrpcFeatureDisabled)
+        ));
     }
 
     #[test]

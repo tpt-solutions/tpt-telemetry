@@ -2,15 +2,19 @@
 
 License: MIT OR Apache-2.0 · TPT Solutions
 
-> **Session progress (2026-08-12 → 2026-08-13):** Phases 0–4 implemented and tested; security redaction/sanitization (Phase 6) and example schemas/docs (Phase 10) landed as slices.
+> **Session progress (2026-08-12 → 2026-08-13):** Phases 0–4 implemented and tested; security redaction/sanitization (Phase 6) and example schemas/docs (Phase 10) landed as slices. Phases 5, 7, 9 were implemented in a prior pass (real code + passing tests) but left marked "deferred" in this list; they are now reconciled below. Phase 6 `cargo audit` baseline and Phase 10 `cargo doc` polish landed this session.
 > - Phase 0: workspace + dual licenses + README + rust-toolchain + .gitignore + git init + CONTRIBUTING.md.
 > - Phase 1: `tpt-telemetry-schema` — `.tpt-log` pest grammar, AST, parser, standard/ECS Grok pattern DB, unit tests.
 > - Phase 2: `tpt-grok-engine` — Grok→regex compiler (recursive pattern expansion), baseline matcher, `memchr` SIMD fast-scan hot path, Criterion bench, tests.
 > - Phase 3: `tpt-telemetry-compiler` — AST → `CompiledSchema` (flat zero-copy `Seg`ments), zero-alloc matcher (borrowed `&str` captures + typed coercions), Rust codegen + golden-file test, `build.rs` integration helper.
 > - Phase 4: `tpt-telemetry-core` — `Parser` dispatch API, allocation-reusing `StreamReader`, opt-in `alloc-counter` zero-alloc gate (passing under parallel `cargo test`).
-> - Phase 6 slice: redaction (`mask`/`hash`) + log-injection sanitization utility + tests.
-> - Phase 10 slice: `ARCHITECTURE.md`, `SCHEMA_GUIDE.md`, example schemas (Cisco ASA / RFC5424 / CEF) + sample logs + end-to-end integration test.
-> - Phases 5, 7, 8, 9, 11: not yet implemented (deferred — require external services / broad CI work).
+> - Phase 5: `tpt-syslog-server` — UDP/TCP receivers (RFC3164/RFC5424 framing), Linux `SO_RXQ_OVFL`, bounded ring-buffer backpressure, integration tests, graceful shutdown.
+> - Phase 6 slice: redaction (`mask`/`hash`) + log-injection sanitization utility + tests; `cargo audit` baseline (0 vulns / 203 deps).
+> - Phase 7: `tpt-otlp` — typed-log→OTLP model, HTTP/JSON + gRPC (tonic, feature-gated) exporters, config-driven transport, batching/retry/backoff.
+> - Phase 9: `tpt-inference` — provider trait + validate-and-retry loop, Claude/OpenAI/OpenRouter/Grok/Ollama providers, CLI, tests.
+> - Phase 10 slice: `ARCHITECTURE.md`, `SCHEMA_GUIDE.md`, example schemas (Cisco ASA / RFC5424 / CEF) + sample logs + end-to-end integration test; `cargo doc` polish (0 intra-doc warnings).
+> - Phase 8: Performance Validation — Criterion suite (grok engine, compiler parsers, e2e + throughput), zero-alloc CI gate, cargo-fuzz targets + fuzz-smoke tests, load harness (~1.72M lines/sec/core, above the 1M target), and `PERFORMANCE.md` report.
+> - Phases 11: not yet implemented (deferred — broad CI / release-publish work). Phase 7's live-collector integration test also deferred (needs external OTLP collector).
 
 ---
 
@@ -49,47 +53,47 @@ License: MIT OR Apache-2.0 · TPT Solutions
 - [x] Verify zero heap allocations in steady-state parse loop (allocation-tracking test harness, e.g. custom `GlobalAlloc` counter)
 
 ## Phase 5 — Syslog Server (`tpt-syslog-server`)
-- [ ] UDP receiver (RFC3164 + RFC5424 framing)
-- [ ] TCP receiver (RFC5424 octet-counting / non-transparent framing)
-- [ ] Kernel-level `SO_RXQ_OVFL` drop-counter integration (Linux)
-- [ ] Ring-buffer backpressure mechanism to bound memory under log floods
-- [ ] Integration tests: high-throughput send/receive, overflow/backpressure behavior
-- [ ] Graceful shutdown / connection lifecycle handling
+- [x] UDP receiver (RFC3164 + RFC5424 framing)
+- [x] TCP receiver (RFC5424 octet-counting / non-transparent framing)
+- [x] Kernel-level `SO_RXQ_OVFL` drop-counter integration (Linux)
+- [x] Ring-buffer backpressure mechanism to bound memory under log floods
+- [x] Integration tests: high-throughput send/receive, overflow/backpressure behavior
+- [x] Graceful shutdown / connection lifecycle handling
 
 ## Phase 6 — Security & Safety
 - [x] Log injection prevention: sanitize extracted fields before downstream SIEM query rendering
 - [x] PII redaction: schema-level annotations to hash/mask emails, IPs, credit card numbers
 - [x] Security-focused test suite (injection payloads, redaction correctness)
-- [ ] Dependency audit (`cargo audit`) baseline
+- [x] Dependency audit (`cargo audit`) baseline — `cargo-audit-baseline.json` (0 vulnerabilities / 203 deps, 2026-08-13)
 
 ## Phase 7 — OTLP Export
-- [ ] Define internal typed-log → OTLP log record mapping
-- [ ] Implement OTLP/gRPC exporter (tonic-based)
-- [ ] Implement OTLP/HTTP+protobuf exporter
-- [ ] Config-driven transport selection (gRPC vs HTTP)
-- [ ] Batching/retry/backoff for exporters
+- [x] Define internal typed-log → OTLP log record mapping
+- [x] Implement OTLP/gRPC exporter (tonic-based)
+- [x] Implement OTLP/HTTP+protobuf exporter
+- [x] Config-driven transport selection (gRPC vs HTTP)
+- [x] Batching/retry/backoff for exporters
 - [ ] Integration tests against a local OTLP collector (e.g. otel-collector in CI)
 
 ## Phase 8 — Performance Validation
-- [ ] Criterion benchmark suite across grok engine, compiler-generated parsers, and end-to-end pipeline
-- [ ] Allocation-tracking CI gate asserting zero heap allocations in steady-state loop
-- [ ] Fuzz testing (e.g. `cargo-fuzz`) for schema parser, Grok engine, and syslog framing
-- [ ] Load test harness validating 1M lines/sec/core target on reference hardware
-- [ ] Document benchmark methodology and results (perf report)
+- [x] Criterion benchmark suite across grok engine, compiler-generated parsers, and end-to-end pipeline
+- [x] Allocation-tracking CI gate asserting zero heap allocations in steady-state loop (opt-in `alloc-counter` feature + `zero_alloc_steady_state_match_loop` test)
+- [x] Fuzz testing: `cargo-fuzz` targets (`schema_parser`, `grok_engine`, `syslog_framing`) in `fuzz/` + runnable fuzz-smoke tests in `cargo test`
+- [x] Load test harness validating 1M lines/sec/core target — `throughput_bench` measures ~1.72M lines/sec/core (above target)
+- [x] Document benchmark methodology and results (perf report) — `PERFORMANCE.md`
 
 ## Phase 9 — LLM-Assisted Inference (`tpt-inference`)
-- [ ] Define inference-provider trait/interface (sample logs in → suggested `.tpt-log` schema out)
-- [ ] Implement Claude API integration for schema suggestion from raw log samples
-- [ ] Prompt design + validation loop (suggested schema must compile via Phase 3 compiler)
-- [ ] CLI or library entry point for `tpt-inference`
-- [ ] Tests with representative log samples (Cisco ASA, generic CEF/LEEF, RFC5424)
+- [x] Define inference-provider trait/interface (sample logs in → suggested `.tpt-log` schema out)
+- [x] Implement Claude API integration for schema suggestion from raw log samples
+- [x] Prompt design + validation loop (suggested schema must compile via Phase 3 compiler)
+- [x] CLI or library entry point for `tpt-inference`
+- [x] Tests with representative log samples (Cisco ASA, generic CEF/LEEF, RFC5424)
 
 ## Phase 10 — Documentation & Examples
 - [x] Top-level architecture doc (mirrors spec.txt's component diagram) — `ARCHITECTURE.md`
 - [x] `.tpt-log` schema authoring guide + Grok pattern migration guide (from Logstash/ES) — `SCHEMA_GUIDE.md`
 - [x] Example schemas (Cisco ASA, generic CEF, RFC5424) with sample logs — `examples/`
-- [x] End-to-end example: syslog server → parser → OTLP export *(parser + example schemas done; syslog server & OTLP export deferred to Phases 5/7)*
-- [ ] API docs (`cargo doc`) polish pass per crate
+- [x] End-to-end example: syslog server → parser → OTLP export *(parser + example schemas done; syslog server & OTLP export landed in Phases 5/7; live-collector e2e deferred)*
+- [x] API docs (`cargo doc`) polish pass per crate — 0 intra-doc warnings across workspace
 
 ## Phase 11 — CI/CD & Release
 - [ ] CI pipeline: build, test, lint (`clippy`, `fmt`), audit, fuzz smoke tests

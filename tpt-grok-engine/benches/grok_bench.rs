@@ -7,7 +7,7 @@ const SAMPLE: &str = "%ASA-3-106001: connection denied from 192.168.1.10 to 10.0
 const MISS: &str = "this line has nothing to do with the pattern at all, no anchor here";
 
 fn bench_grok(c: &mut Criterion) {
-    let g = Grok::new("%ASA-%{severity:int}-%{msg_id:int}: %{message}").unwrap();
+    let g = Grok::new("%ASA-%{INT:severity}-%{NUMBER:msg_id}: %{GREEDYDATA:message}").unwrap();
 
     c.bench_function("grok_baseline_match", |b| {
         b.iter(|| black_box(&g).find(black_box(SAMPLE)))

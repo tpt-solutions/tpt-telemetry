@@ -66,7 +66,9 @@ impl InferenceProvider for OpenAiCompatProvider {
             .set("Authorization", &format!("Bearer {key}"))
             .set("Content-Type", "application/json")
             .send_json(body)?;
-        let v: serde_json::Value = resp.into_json().map_err(|e| InferenceError::Http(e.to_string()))?;
+        let v: serde_json::Value = resp
+            .into_json()
+            .map_err(|e| InferenceError::Http(e.to_string()))?;
         extract_openai_compat(&v)
     }
 }
@@ -90,9 +92,27 @@ macro_rules! openai_compat {
 }
 
 openai_compat!(
-    (openai, "openai", "https://api.openai.com/v1", "gpt-4o-mini", "OPENAI_API_KEY"),
-    (openrouter, "openrouter", "https://openrouter.ai/api/v1", "openai/gpt-4o-mini", "OPENROUTER_API_KEY"),
-    (grok, "grok", "https://api.x.ai/v1", "grok-beta", "XAI_API_KEY"),
+    (
+        openai,
+        "openai",
+        "https://api.openai.com/v1",
+        "gpt-4o-mini",
+        "OPENAI_API_KEY"
+    ),
+    (
+        openrouter,
+        "openrouter",
+        "https://openrouter.ai/api/v1",
+        "openai/gpt-4o-mini",
+        "OPENROUTER_API_KEY"
+    ),
+    (
+        grok,
+        "grok",
+        "https://api.x.ai/v1",
+        "grok-beta",
+        "XAI_API_KEY"
+    ),
 );
 
 // ---------------------------------------------------------------------------
@@ -140,7 +160,9 @@ impl InferenceProvider for AnthropicProvider {
             .set("anthropic-version", "2023-06-01")
             .set("Content-Type", "application/json")
             .send_json(body)?;
-        let v: serde_json::Value = resp.into_json().map_err(|e| InferenceError::Http(e.to_string()))?;
+        let v: serde_json::Value = resp
+            .into_json()
+            .map_err(|e| InferenceError::Http(e.to_string()))?;
         v["content"][0]["text"]
             .as_str()
             .map(|s| strip_code_fences(s).to_string())
@@ -192,7 +214,9 @@ impl InferenceProvider for OllamaProvider {
         let resp = ureq::post(&url)
             .set("Content-Type", "application/json")
             .send_json(body)?;
-        let v: serde_json::Value = resp.into_json().map_err(|e| InferenceError::Http(e.to_string()))?;
+        let v: serde_json::Value = resp
+            .into_json()
+            .map_err(|e| InferenceError::Http(e.to_string()))?;
         v["message"]["content"]
             .as_str()
             .map(|s| strip_code_fences(s).to_string())

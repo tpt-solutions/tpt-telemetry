@@ -101,10 +101,7 @@ impl CompiledSchema {
                     PatternPart::Literal(s) => segments.push(Seg::Literal(s.clone())),
                     PatternPart::Capture(c) => {
                         let (field, ty) = if c.grok {
-                            let field = c
-                                .field
-                                .clone()
-                                .unwrap_or_else(|| c.name.clone());
+                            let field = c.field.clone().unwrap_or_else(|| c.name.clone());
                             let ty = if c.ty != TypeName::String {
                                 c.ty
                             } else {
@@ -131,7 +128,12 @@ impl CompiledSchema {
                 .map(|r| (r.field.clone(), r.mode))
                 .collect();
 
-            formats.push(CompiledFormat::new(f.name.clone(), segments, coercions, redactions));
+            formats.push(CompiledFormat::new(
+                f.name.clone(),
+                segments,
+                coercions,
+                redactions,
+            ));
         }
         Ok(CompiledSchema { formats })
     }
@@ -250,13 +252,7 @@ pub struct Field<'a> {
 /// Recursively match `segs` against `line` starting at `pos`, consuming segments
 /// from `si` onward. Pushes capture ranges into `ctx.caps`. Returns `true` on a
 /// full match (consuming the entire line).
-fn match_segments(
-    segs: &[Seg],
-    line: &str,
-    si: usize,
-    pos: usize,
-    ctx: &mut MatchCtx,
-) -> bool {
+fn match_segments(segs: &[Seg], line: &str, si: usize, pos: usize, ctx: &mut MatchCtx) -> bool {
     if si == segs.len() {
         return pos == line.len();
     }
@@ -306,7 +302,10 @@ fn type_matches(ty: TypeName, sub: &str) -> bool {
         TypeName::Uint => sub.parse::<u64>().is_ok(),
         TypeName::Float => sub.parse::<f64>().is_ok(),
         TypeName::Bool => {
-            matches!(sub.to_ascii_lowercase().as_str(), "true" | "false" | "1" | "0")
+            matches!(
+                sub.to_ascii_lowercase().as_str(),
+                "true" | "false" | "1" | "0"
+            )
         }
         TypeName::String => true,
         TypeName::Ipv4 => sub.parse::<Ipv4Addr>().is_ok(),
@@ -344,7 +343,10 @@ fn parse_timestamp(s: &str) -> Option<(i64, u32)> {
     }
     for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"] {
         if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
-            return Some((dt.and_utc().timestamp(), dt.and_utc().timestamp_subsec_nanos()));
+            return Some((
+                dt.and_utc().timestamp(),
+                dt.and_utc().timestamp_subsec_nanos(),
+            ));
         }
     }
     None
@@ -462,10 +464,7 @@ fn coerce_field<'a>(
                             return Value::Enum(n as u8);
                         }
                     }
-                    match variants
-                        .iter()
-                        .position(|v| v.eq_ignore_ascii_case(raw))
-                    {
+                    match variants.iter().position(|v| v.eq_ignore_ascii_case(raw)) {
                         Some(idx) => Value::Enum(idx as u8),
                         None => Value::Str(raw),
                     }
@@ -500,9 +499,7 @@ fn coerce_scalar(ty: TypeName, raw: &str) -> Value<'_> {
             .parse::<IpAddr>()
             .map(Value::Ip)
             .unwrap_or(Value::Str(raw)),
-        TypeName::Mac => parse_mac(raw)
-            .map(Value::Mac)
-            .unwrap_or(Value::Str(raw)),
+        TypeName::Mac => parse_mac(raw).map(Value::Mac).unwrap_or(Value::Str(raw)),
         TypeName::Timestamp => parse_timestamp(raw)
             .map(|(s, _)| Value::Timestamp(s))
             .unwrap_or(Value::Str(raw)),

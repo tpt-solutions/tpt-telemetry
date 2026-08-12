@@ -1,7 +1,7 @@
 //! Rust source code generation from a `.tpt-log` [`Schema`].
 //!
 //! `generate_rust` emits a self-contained Rust module that reconstructs a
-//! [`CompiledSchema`] using the public builder API. The output is deterministic
+//! [`CompiledSchema`](crate::compile::CompiledSchema) using the public builder API. The output is deterministic
 //! and suitable for golden-file diffing (see `tests/golden/`), and — because it
 //! only references the compiler's public types — it compiles and runs as a real
 //! generated parser.
@@ -31,7 +31,10 @@ pub fn generate_rust(schema: &Schema) -> Result<String> {
         for part in &f.pattern.parts {
             match part {
                 PatternPart::Literal(s) => {
-                    out.push_str(&format!("                Seg::Literal({:?}.to_string()),\n", s));
+                    out.push_str(&format!(
+                        "                Seg::Literal({:?}.to_string()),\n",
+                        s
+                    ));
                 }
                 PatternPart::Capture(c) => {
                     let (field, ty) = if c.grok {
@@ -39,10 +42,9 @@ pub fn generate_rust(schema: &Schema) -> Result<String> {
                         let ty = if c.ty != TypeName::String {
                             c.ty
                         } else {
-                            native_for_grok(&c.name)
-                                .ok_or_else(|| {
-                                    crate::error::CompileError::UnsupportedGrok(c.name.clone())
-                                })?
+                            native_for_grok(&c.name).ok_or_else(|| {
+                                crate::error::CompileError::UnsupportedGrok(c.name.clone())
+                            })?
                         };
                         (field, ty)
                     } else {
@@ -69,7 +71,10 @@ pub fn generate_rust(schema: &Schema) -> Result<String> {
                     ));
                 }
                 CoercionTarget::Enum(variants) => {
-                    out.push_str(&format!("                ({:?}.to_string(), CoercionTarget::Enum(vec![\n", co.field));
+                    out.push_str(&format!(
+                        "                ({:?}.to_string(), CoercionTarget::Enum(vec![\n",
+                        co.field
+                    ));
                     for v in variants {
                         out.push_str(&format!("                    {:?}.to_string(),\n", v));
                     }
@@ -154,4 +159,3 @@ mod tests {
         assert_eq!(generated, golden, "codegen drifted from golden file");
     }
 }
-
