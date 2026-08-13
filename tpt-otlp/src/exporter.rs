@@ -10,28 +10,27 @@ use std::time::Duration;
 use tpt_telemetry_compiler::Record;
 
 /// OTLP transport.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Transport {
     /// OTLP/gRPC (port 4317). Requires the `grpc` feature.
     Grpc,
     /// OTLP/HTTP+JSON (port 4318, `/v1/logs`).
+    #[default]
     Http,
 }
 
-impl Default for Transport {
-    fn default() -> Self {
-        Transport::Http
-    }
-}
-
 /// Exporter configuration.
-#[derive(Debug, Clone)]
+///
+/// `Debug` is implemented manually so secret header values are never echoed
+/// into logs.
+#[derive(Clone)]
 pub struct ExporterConfig {
     /// Transport to use.
     pub transport: Transport,
-    /// Base endpoint, e.g. `http://localhost:4318` (HTTP) or `http://localhost:4317` (gRPC).
+    /// Base endpoint, e.g. `http://localhost:4318` (HTTP) or `https://localhost:4317` (gRPC).
     pub endpoint: String,
-    /// Extra HTTP headers (e.g. auth tokens). Ignored by gRPC.
+    /// Extra HTTP/gRPC headers (e.g. auth tokens). Values are treated as secrets
+    /// and redacted from `Debug` output.
     pub headers: HashMap<String, String>,
     /// Maximum number of records per export request.
     pub batch_size: usize,
@@ -43,6 +42,9 @@ pub struct ExporterConfig {
     pub base_backoff_ms: u64,
     /// OTLP scope name attached to exported records.
     pub scope_name: String,
+    /// If true, exporting over a plaintext (`http://`) endpoint when `headers`
+    /// contains any entries is a hard error (to avoid leaking credentials).
+    pub require_tls: bool,
 }
 
 impl Default for ExporterConfig {
@@ -56,13 +58,33 @@ impl Default for ExporterConfig {
             max_retries: 3,
             base_backoff_ms: 100,
             scope_name: "tpt-telemetry".into(),
+            require_tls: false,
         }
+    }
+}
+
+impl std::fmt::Debug for ExporterConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExporterConfig")
+            .field("transport", &self.transport)
+            .field("endpoint", &self.endpoint)
+            .field(
+                "headers",
+                &format_args!("{{{} redacted}}", self.headers.len()),
+            )
+            .field("batch_size", &self.batch_size)
+            .field("timeout_ms", &self.timeout_ms)
+            .field("max_retries", &self.max_retries)
+            .field("base_backoff_ms", &self.base_backoff_ms)
+            .field("scope_name", &self.scope_name)
+            .field("require_tls", &self.require_tls)
+            .finish()
     }
 }
 
 /// An OTLP log exporter.
 pub struct Exporter {
-    config: ExporterConfig,
+    pub(crate) config: ExporterConfig,
 }
 
 impl Exporter {
@@ -88,6 +110,16 @@ impl Exporter {
     }
 
     fn export_payload(&self, payload: &LogsPayload) -> Result<(), OtlpError> {
+        // Guard against leaking secret headers over a plaintext transport.
+        if self.config.require_tls
+            && !self.config.endpoint.starts_with("https://")
+            && !self.config.headers.is_empty()
+        {
+            return Err(OtlpError::InsecureTransport(format!(
+                "{} secret header(s) configured but endpoint is not https",
+                self.config.headers.len()
+            )));
+        }
         match self.config.transport {
             Transport::Http => self.export_http(payload),
             Transport::Grpc => self.export_grpc(payload),
@@ -157,6 +189,14 @@ mod tests {
             ..Default::default()
         };
         let e = Exporter::new(cfg);
+        // Without the gRPC feature the exporter cannot dial; with it enabled it
+        // will attempt a connection and surface a transport error.
+        #[cfg(feature = "grpc")]
+        assert!(matches!(
+            e.export(std::slice::from_ref(&rec)),
+            Err(OtlpError::Transport(_))
+        ));
+        #[cfg(not(feature = "grpc"))]
         assert!(matches!(
             e.export(std::slice::from_ref(&rec)),
             Err(OtlpError::GrpcFeatureDisabled)
@@ -183,5 +223,40 @@ mod tests {
         // and surface a transport error, not panic.
         let res = e.export(&records);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn require_tls_blocks_insecure_headers() {
+        let cfg = ExporterConfig {
+            require_tls: true,
+            endpoint: "http://localhost:4318".into(),
+            headers: vec![("Authorization".into(), "Bearer secret".into())]
+                .into_iter()
+                .collect(),
+            ..Default::default()
+        };
+        let e = Exporter::new(cfg);
+        let rec = Record {
+            format: "X",
+            fields: vec![],
+        };
+        let res = e.export(std::slice::from_ref(&rec));
+        assert!(matches!(res, Err(OtlpError::InsecureTransport(_))));
+    }
+
+    #[test]
+    fn debug_redacts_header_values() {
+        let cfg = ExporterConfig {
+            headers: vec![("Authorization".into(), "super-secret".into())]
+                .into_iter()
+                .collect(),
+            ..Default::default()
+        };
+        let s = format!("{cfg:?}");
+        assert!(
+            !s.contains("super-secret"),
+            "header value leaked into Debug"
+        );
+        assert!(s.contains("redacted"), "Debug should mark headers redacted");
     }
 }

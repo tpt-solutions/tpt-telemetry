@@ -1,0 +1,8 @@
+target
+.git
+.github
+*.log
+*.md
+**/*.rs.bk
+.cargo
+.dockerignore

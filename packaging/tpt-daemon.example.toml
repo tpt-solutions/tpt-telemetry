@@ -1,0 +1,49 @@
+# Example tpt-daemon configuration.
+#
+# Copy to /etc/tpt-daemon/tpt-daemon.toml and adjust. String values support
+# ${ENV_VAR} interpolation (e.g. for secret OTLP tokens).
+
+[schema]
+# Path to a `.tpt-log` schema file (relative to the daemon's working dir).
+path = "examples/schemas/cisco_asa.tpt-log"
+
+[syslog]
+# Ring-buffer capacity (messages) used for backpressure.
+ring_capacity = 65536
+read_timeout_ms = 250
+
+  [syslog.udp]
+  # UDP syslog (RFC3164 / RFC5424-over-UDP). Bind 0.0.0.0:514 to receive.
+  bind = "0.0.0.0:514"
+
+  [syslog.tcp]
+  # TCP syslog. `framing` is one of: auto, octet, lf.
+  bind = "0.0.0.0:514"
+  framing = "auto"
+  # Reject frames larger than this many bytes (defense against memory abuse).
+  max_frame_len = 1048576
+  # Reject TCP connections beyond this cap.
+  max_connections = 1024
+
+[otlp]
+# OTLP collector endpoint. Use https:// when require_tls = true.
+endpoint = "http://localhost:4318"
+# Transport: http (OTLP/HTTP+JSON) or grpc (OTLP/gRPC).
+transport = "http"
+batch_size = 1024
+timeout_ms = 10000
+max_retries = 3
+base_backoff_ms = 100
+scope_name = "tpt-daemon"
+# Require TLS when auth headers are configured to avoid leaking credentials.
+require_tls = false
+
+  [otlp.headers]
+  # Authorization = "Bearer ${OTLP_TOKEN}"
+
+[metrics]
+# Prometheus metrics on /metrics and health on /healthz.
+bind = "0.0.0.0:9464"
+
+[logging]
+level = "info"

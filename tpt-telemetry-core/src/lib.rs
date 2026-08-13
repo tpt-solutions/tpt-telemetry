@@ -8,7 +8,7 @@
 //! [`MatchCtx`]; see the allocation-tracking test gated behind the
 //! `alloc-counter` feature.
 
-use std::io::Read;
+use std::io::{self, Read};
 
 pub use tpt_telemetry_compiler::{
     CompiledFormat, CompiledSchema, Field, MatchCtx, RawMatch, Record, TypedField, Value,
@@ -71,6 +71,7 @@ pub struct StreamReader<R> {
     start: usize,
     end: usize,
     done: bool,
+    last_error: Option<io::Error>,
 }
 
 impl<R: Read> StreamReader<R> {
@@ -83,10 +84,11 @@ impl<R: Read> StreamReader<R> {
     pub fn with_capacity(reader: R, cap: usize) -> Self {
         StreamReader {
             reader,
-            buf: Vec::with_capacity(cap),
+            buf: vec![0u8; cap],
             start: 0,
             end: 0,
             done: false,
+            last_error: None,
         }
     }
 
@@ -129,14 +131,39 @@ impl<R: Read> StreamReader<R> {
             }
             let n = {
                 let tmp = &mut self.buf[self.end..];
-                self.reader.read(tmp).unwrap_or(0)
+                match self.reader.read(tmp) {
+                    Ok(0) => {
+                        self.done = true;
+                        0
+                    }
+                    Ok(k) => k,
+                    Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {
+                        // Transient: retry the read on the next loop iteration.
+                        continue;
+                    }
+                    Err(e) => {
+                        // A genuine I/O error: record it, stop, and let the
+                        // caller distinguish it from a clean EOF via `last_error`.
+                        self.last_error = Some(e);
+                        self.done = true;
+                        0
+                    }
+                }
             };
             if n == 0 {
-                self.done = true;
                 continue;
             }
             self.end += n;
         }
+    }
+
+    /// Returns the last I/O error encountered while reading, if any.
+    ///
+    /// A `None` result means the stream ended cleanly (EOF) with no error, or no
+    /// read has happened yet. This lets callers tell a genuine transport error
+    /// apart from end-of-input.
+    pub fn last_error(&self) -> Option<&io::Error> {
+        self.last_error.as_ref()
     }
 }
 
@@ -157,7 +184,7 @@ mod alloc_counter {
     static COUNT: AtomicU64 = AtomicU64::new(0);
 
     thread_local! {
-        static TRACKING: Cell<bool> = Cell::new(false);
+        static TRACKING: Cell<bool> = const { Cell::new(false) };
     }
 
     #[global_allocator]
@@ -246,6 +273,38 @@ mod tests {
         assert!(r.next_line().is_none());
     }
 
+    /// A reader that yields a partial line, then fails with an I/O error.
+    struct FailingRead {
+        given: &'static [u8],
+        exhausted: bool,
+    }
+
+    impl Read for FailingRead {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if !self.exhausted {
+                let n = self.given.len().min(buf.len());
+                buf[..n].copy_from_slice(&self.given[..n]);
+                self.exhausted = true;
+                return Ok(n);
+            }
+            Err(io::Error::other("boom"))
+        }
+    }
+
+    #[test]
+    fn stream_reader_surfaces_io_error_via_last_error() {
+        let mut r = StreamReader::new(FailingRead {
+            given: b"partial",
+            exhausted: false,
+        });
+        // The partial line is returned once.
+        assert_eq!(r.next_line().unwrap(), b"partial");
+        // Then the read error surfaces as a clean None with the error recorded.
+        assert!(r.next_line().is_none());
+        assert!(r.last_error().is_some());
+        assert_eq!(r.last_error().unwrap().to_string(), "boom");
+    }
+
     #[cfg(feature = "alloc-counter")]
     #[test]
     fn zero_alloc_steady_state_match_loop() {
@@ -253,7 +312,7 @@ mod tests {
         let lines = "%ASA-6-302013: Built inbound TCP connection\n\
                      %ASA-3-106001: connection denied\n\
                      %ASA-4-106023: deny tcp src inside\n";
-        let mut r = StreamReader::new(Cursor::new(&lines[..]));
+        let mut r = StreamReader::new(Cursor::new(lines));
         let mut ctx = MatchCtx::new(8);
 
         // Warm up: pull one line + match so internal buffers reach capacity.

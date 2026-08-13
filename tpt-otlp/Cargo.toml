@@ -27,5 +27,7 @@ tokio = { version = "1", features = ["rt", "macros", "net", "time"], optional = 
 [features]
 default = []
 grpc = ["dep:opentelemetry-proto", "dep:tonic", "dep:tokio"]
+# TLS for OTLP/gRPC `https://` endpoints (pulls in rustls + system root store).
+tls = ["grpc", "tonic/tls", "tonic/tls-roots"]
 
 [dev-dependencies]

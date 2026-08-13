@@ -64,9 +64,9 @@ workspace-version inheritance.
 4. Tag the release: `git tag -s v<version> -m "tpt-telemetry <version>"`.
 5. Publish dependencies before dependents (cargo enforces this, but the order
    is): `schema` → `grok-engine`, `compiler` → `core` → `syslog-server`,
-   `inference`, `otlp`.
-   A `cargo publish` wrapper or the planned `release.yml` workflow handles the
-   ordering automatically.
+   `inference`, `otlp` → `daemon`.
+   `.github/workflows/publish.yml` publishes the crates in this exact order on a
+   `v*` tag push (with retries to absorb crates.io index propagation lag).
 6. Push the tag and the `v<version>` GitHub Release (auto-generated notes from
    the changelogs).
 

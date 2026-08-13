@@ -7,24 +7,27 @@ crates fit together.
 
 ```
                  .tpt-log schema
-                       │
-                       ▼
-        ┌──────────────────────────────┐
-        │   tpt-telemetry-compiler     │  AST → CompiledSchema (flat segments)
-        │  • zero-copy matcher         │  • Rust codegen (golden files)
-        │  • Rust codegen              │
-        └───────────────┬──────────────┘
-                        │ CompiledSchema
+                        │
                         ▼
-        ┌──────────────────────────────┐
-        │     tpt-telemetry-core       │  Parser dispatch + StreamReader
-        │  • feed raw line/bytes       │  • zero-alloc match hot path
-        │  • typed Record (coerce+     │  • allocation-tracking harness
-        │    redact)                   │
-        └───────────────┬──────────────┘
-                        │ Record
-                        ▼
-                 OTLP / SIEM export  (tpt-otlp, planned)
+         ┌──────────────────────────────┐
+         │   tpt-telemetry-compiler     │  AST → CompiledSchema (flat segments)
+         │  • zero-copy matcher         │  • Rust codegen (golden files)
+         │  • Rust codegen              │
+         └───────────────┬──────────────┘
+                         │ CompiledSchema
+                         ▼
+         ┌──────────────────────────────┐
+         │     tpt-telemetry-core       │  Parser dispatch + StreamReader
+         │  • feed raw line/bytes       │  • zero-alloc match hot path
+         │  • typed Record (coerce+     │  • allocation-tracking harness
+         │    redact)                   │
+         └───────────────┬──────────────┘
+                         │ Record
+                         ▼
+                  OTLP export  (tpt-otlp)
+                         │ OTLP/logs (HTTP+JSON or gRPC)
+                         ▼
+   tpt-daemon  (syslog UDP/TCP ingest → parse → OTLP)
 ```
 
 ## Crate responsibilities
@@ -44,8 +47,19 @@ crates fit together.
 - **`tpt-telemetry-core`** — The public `Parser` API over a `CompiledSchema`,
   plus a chunked, allocation-reusing `StreamReader` for multi-gigabyte inputs.
   Provides an opt-in allocation-tracking gate (`alloc-counter` feature).
-- **`tpt-syslog-server`** — UDP/TCP receiver (RFC3164 / RFC5424). *Planned.*
-- **`tpt-inference`** — LLM-assisted schema suggestion from raw samples. *Planned.*
+- **`tpt-syslog-server`** — UDP/TCP receiver (RFC3164 / RFC5424) with a bounded
+  ring buffer for backpressure, Linux `SO_RXQ_OVFL` overflow accounting, and
+  per-frame / per-connection caps. Feeds `Message`s into the parser.
+- **`tpt-otlp`** — Internal typed-log → OTLP log-record mapping plus HTTP/JSON
+  and gRPC (tonic, `grpc`/`tls` features) exporters with config-driven transport
+  selection, batching, retry, and backoff.
+- **`tpt-inference`** — LLM-assisted schema suggestion from raw samples (Claude /
+  OpenAI / OpenRouter / Grok / Ollama) behind a provider trait with a
+  validate-and-retry loop.
+- **`tpt-daemon`** — Unified binary that wires the above together: binds the
+  syslog receivers, compiles the schema, parses each message, and exports the
+  typed records to OTLP. Ships a Prometheus `/metrics` + `/healthz` endpoint and
+  a TOML config with `${ENV_VAR}` secret interpolation.
 
 ## Zero-copy / zero-allocation design
 

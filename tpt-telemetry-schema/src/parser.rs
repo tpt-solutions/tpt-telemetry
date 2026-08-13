@@ -25,6 +25,8 @@ pub enum SchemaError {
     UnknownRedactMode(String),
     #[error("format `{0}` is missing a `pattern:` declaration")]
     MissingPattern(String),
+    #[error("malformed schema AST: {0}")]
+    MalformedAst(String),
 }
 
 /// Parse a `.tpt-log` schema source string into an [`Schema`].
@@ -50,7 +52,9 @@ pub fn parse(input: &str) -> Result<Schema, SchemaError> {
                         match item.as_rule() {
                             Rule::ident => name = Some(item.as_str().to_string()),
                             Rule::pattern_decl => {
-                                let string_pair = item.into_inner().next().unwrap();
+                                let string_pair = item.into_inner().next().ok_or_else(|| {
+                                    SchemaError::MalformedAst("empty pattern".into())
+                                })?;
                                 let raw = unquote(string_pair);
                                 pattern = Some(tokenize_pattern(&raw)?);
                             }
@@ -126,10 +130,21 @@ fn unquote(pair: pest::iterators::Pair<Rule>) -> String {
 
 fn parse_extract(pair: pest::iterators::Pair<Rule>, _fmt: &str) -> Result<Extract, SchemaError> {
     let mut it = pair.into_inner();
-    let field = it.next().unwrap().as_str().to_string();
+    let field = it
+        .next()
+        .ok_or_else(|| SchemaError::MalformedAst("extract: missing field".into()))?
+        .as_str()
+        .to_string();
     // `from` keyword is implicit; the grammar only yields the two idents + string.
-    let source = it.next().unwrap().as_str().to_string();
-    let regex = unquote(it.next().unwrap());
+    let source = it
+        .next()
+        .ok_or_else(|| SchemaError::MalformedAst("extract: missing source".into()))?
+        .as_str()
+        .to_string();
+    let regex = unquote(
+        it.next()
+            .ok_or_else(|| SchemaError::MalformedAst("extract: missing regex".into()))?,
+    );
     Ok(Extract {
         field,
         source,
@@ -139,10 +154,19 @@ fn parse_extract(pair: pest::iterators::Pair<Rule>, _fmt: &str) -> Result<Extrac
 
 fn parse_coerce(pair: pest::iterators::Pair<Rule>, _fmt: &str) -> Result<Coercion, SchemaError> {
     let mut it = pair.into_inner();
-    let field = it.next().unwrap().as_str().to_string();
-    let target_pair = it.next().unwrap();
+    let field = it
+        .next()
+        .ok_or_else(|| SchemaError::MalformedAst("coerce: missing field".into()))?
+        .as_str()
+        .to_string();
+    let target_pair = it
+        .next()
+        .ok_or_else(|| SchemaError::MalformedAst("coerce: missing target".into()))?;
     // `coerce_target` wraps either `enum_decl` or `type_name`; look one level in.
-    let inner = target_pair.into_inner().next().unwrap();
+    let inner = target_pair
+        .into_inner()
+        .next()
+        .ok_or_else(|| SchemaError::MalformedAst("coerce: empty target".into()))?;
     let target = match inner.as_rule() {
         Rule::type_name => CoercionTarget::Type(parse_type(inner.as_str())?),
         Rule::enum_decl => {
@@ -152,15 +176,22 @@ fn parse_coerce(pair: pest::iterators::Pair<Rule>, _fmt: &str) -> Result<Coercio
                 .collect::<Vec<_>>();
             CoercionTarget::Enum(variants)
         }
-        _ => return Err(SchemaError::Parse("invalid coercion target".into())),
+        _ => return Err(SchemaError::MalformedAst("invalid coercion target".into())),
     };
     Ok(Coercion { field, target })
 }
 
 fn parse_redact(pair: pest::iterators::Pair<Rule>) -> Result<Redaction, SchemaError> {
     let mut it = pair.into_inner();
-    let field = it.next().unwrap().as_str().to_string();
-    let mode_str = it.next().unwrap().as_str();
+    let field = it
+        .next()
+        .ok_or_else(|| SchemaError::MalformedAst("redact: missing field".into()))?
+        .as_str()
+        .to_string();
+    let mode_str = it
+        .next()
+        .ok_or_else(|| SchemaError::MalformedAst("redact: missing mode".into()))?
+        .as_str();
     let mode = match mode_str {
         "hash" => RedactMode::Hash,
         "mask" => RedactMode::Mask,

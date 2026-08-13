@@ -12,13 +12,19 @@ pub mod message;
 mod server;
 mod stats;
 
-pub use framing::TcpFraming;
+pub use framing::{FrameError, TcpFraming};
 pub use message::{Framing, Message, Transport};
 pub use server::{ServerConfig, SyslogServer};
 pub use stats::Stats;
 
 /// Default ring-buffer capacity (in messages) used for backpressure.
 pub const DEFAULT_RING_CAPACITY: usize = 1 << 16;
+
+/// Default maximum concurrent TCP connections.
+pub const DEFAULT_MAX_CONNECTIONS: usize = 1024;
+
+/// Default per-frame size ceiling (bytes) enforced by the TCP framing decoder.
+pub const DEFAULT_MAX_FRAME_LEN: usize = framing::MAX_FRAME_LEN;
 
 /// Default socket read timeout used to periodically check the shutdown flag.
 pub const DEFAULT_READ_TIMEOUT_MS: u64 = 250;

@@ -8,6 +8,7 @@ members = [
     "tpt-syslog-server",
     "tpt-inference",
     "tpt-otlp",
+    "tpt-daemon",
 ]
 
 [workspace.package]

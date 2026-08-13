@@ -38,12 +38,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (workspace, all targets, all features)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: Clippy (fuzz targets)
-        # The fuzz crate is a standalone workspace (nightly + cargo-fuzz), so it
-        # is linted separately here for convenience; the real fuzz run is gated
-        # in the `fuzz` job below.
-        run: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets -- -D warnings
-        continue-on-error: true
 
   build-test:
     name: build + test (${{ matrix.os }})

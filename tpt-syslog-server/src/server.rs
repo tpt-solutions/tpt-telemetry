@@ -1,17 +1,19 @@
 //! Syslog server: UDP + TCP receivers feeding a bounded ring buffer.
 
-use crate::framing::TcpFraming;
+use crate::framing::{FrameError, TcpFraming};
 use crate::message::{Framing, Message, Transport};
 use crate::stats::{Stats, StatsSnapshot};
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime};
 
-use crate::{DEFAULT_READ_TIMEOUT_MS, DEFAULT_RING_CAPACITY};
+use crate::{
+    DEFAULT_MAX_CONNECTIONS, DEFAULT_MAX_FRAME_LEN, DEFAULT_READ_TIMEOUT_MS, DEFAULT_RING_CAPACITY,
+};
 
 /// Server configuration.
 #[derive(Debug, Clone)]
@@ -26,6 +28,11 @@ pub struct ServerConfig {
     pub read_timeout_ms: u64,
     /// TCP framing mode.
     pub tcp_framing: TcpFraming,
+    /// Maximum number of concurrent TCP connections. Connections beyond this
+    /// cap are accepted then immediately closed and counted as rejected.
+    pub max_connections: usize,
+    /// Per-frame size ceiling (bytes) enforced by the TCP framing decoder.
+    pub max_frame_len: usize,
 }
 
 impl Default for ServerConfig {
@@ -36,6 +43,8 @@ impl Default for ServerConfig {
             ring_capacity: DEFAULT_RING_CAPACITY,
             read_timeout_ms: DEFAULT_READ_TIMEOUT_MS,
             tcp_framing: TcpFraming::Auto,
+            max_connections: DEFAULT_MAX_CONNECTIONS,
+            max_frame_len: DEFAULT_MAX_FRAME_LEN,
         }
     }
 }
@@ -43,10 +52,11 @@ impl Default for ServerConfig {
 impl ServerConfig {
     /// Bind both listeners to the given ports on localhost.
     pub fn localhost(udp_port: u16, tcp_port: u16) -> Self {
-        let mut c = ServerConfig::default();
-        c.udp_bind = SocketAddr::from(([127, 0, 0, 1], udp_port));
-        c.tcp_bind = SocketAddr::from(([127, 0, 0, 1], tcp_port));
-        c
+        ServerConfig {
+            udp_bind: SocketAddr::from(([127, 0, 0, 1], udp_port)),
+            tcp_bind: SocketAddr::from(([127, 0, 0, 1], tcp_port)),
+            ..Default::default()
+        }
     }
 }
 
@@ -98,8 +108,21 @@ impl SyslogServer {
             let stats = Arc::clone(&stats);
             let framing = config.tcp_framing;
             let read_timeout = config.read_timeout_ms;
+            let max_connections = config.max_connections;
+            let max_frame_len = config.max_frame_len;
+            let live = Arc::new(AtomicUsize::new(0));
             handles.push(thread::spawn(move || {
-                tcp_accept_loop(tcp, tx, &stats, &stop, framing, read_timeout);
+                tcp_accept_loop(
+                    tcp,
+                    tx,
+                    &stats,
+                    &stop,
+                    framing,
+                    read_timeout,
+                    max_connections,
+                    max_frame_len,
+                    live,
+                );
             }));
         }
 
@@ -211,6 +234,7 @@ fn udp_recv_loop(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn tcp_accept_loop(
     listener: TcpListener,
     tx: SyncSender<Message>,
@@ -218,16 +242,29 @@ fn tcp_accept_loop(
     stop: &Arc<AtomicBool>,
     framing: TcpFraming,
     read_timeout: u64,
+    max_connections: usize,
+    max_frame_len: usize,
+    live: Arc<AtomicUsize>,
 ) {
     while !stop.load(Ordering::SeqCst) {
         match listener.accept() {
             Ok((stream, addr)) => {
-                let _ = stream.set_read_timeout(Some(Duration::from_millis(read_timeout)));
+                // Enforce the connection cap. We bump first and reject if we have
+                // already reached the limit, closing the surplus connection.
+                let cur = live.fetch_add(1, Ordering::SeqCst);
+                if cur >= max_connections {
+                    live.fetch_sub(1, Ordering::SeqCst);
+                    stats.rejected_connections.fetch_add(1, Ordering::Relaxed);
+                    drop(stream);
+                    continue;
+                }
                 let tx = tx.clone();
                 let stats = Arc::clone(stats);
                 let stop = Arc::clone(stop);
+                let live = Arc::clone(&live);
                 thread::spawn(move || {
-                    tcp_conn_loop(stream, addr, tx, &stats, &stop, framing);
+                    tcp_conn_loop(stream, addr, tx, &stats, &stop, framing, max_frame_len);
+                    live.fetch_sub(1, Ordering::SeqCst);
                 });
             }
             Err(e)
@@ -247,15 +284,24 @@ fn tcp_conn_loop(
     stats: &Arc<Stats>,
     stop: &Arc<AtomicBool>,
     framing: TcpFraming,
+    max_frame_len: usize,
 ) {
-    let mut decoder = crate::framing::TcpDecoder::new(framing);
+    let mut decoder = crate::framing::TcpDecoder::new(framing, max_frame_len);
     let mut buf = vec![0u8; 65536];
     let mut frames: Vec<Vec<u8>> = Vec::with_capacity(16);
     while !stop.load(Ordering::SeqCst) {
         match stream.read(&mut buf) {
             Ok(0) => break, // EOF
             Ok(n) => {
-                decoder.push(&buf[..n], &mut frames);
+                match decoder.push(&buf[..n], &mut frames) {
+                    Ok(()) => {}
+                    Err(FrameError::FrameTooLarge { .. }) => {
+                        // The peer sent a frame that violates the size ceiling.
+                        // Drop the connection rather than buffering attacker
+                        // controlled bytes indefinitely.
+                        break;
+                    }
+                }
                 for f in frames.drain(..) {
                     let msg = Message {
                         transport: Transport::Tcp,
@@ -277,19 +323,20 @@ fn tcp_conn_loop(
         }
     }
     // Flush any trailing frame on close.
-    decoder.flush(&mut frames);
-    for f in frames.drain(..) {
-        let msg = Message {
-            transport: Transport::Tcp,
-            remote: addr,
-            framing: match framing {
-                TcpFraming::OctetCounting => Framing::Rfc5424OctetCounting,
-                _ => Framing::Rfc3164Lf,
-            },
-            payload: f,
-            received_at: SystemTime::now(),
-        };
-        deliver(&tx, stats, msg);
+    if decoder.flush(&mut frames).is_ok() {
+        for f in frames.drain(..) {
+            let msg = Message {
+                transport: Transport::Tcp,
+                remote: addr,
+                framing: match framing {
+                    TcpFraming::OctetCounting => Framing::Rfc5424OctetCounting,
+                    _ => Framing::Rfc3164Lf,
+                },
+                payload: f,
+                received_at: SystemTime::now(),
+            };
+            deliver(&tx, stats, msg);
+        }
     }
     let _ = stream.flush();
 }
@@ -301,10 +348,10 @@ fn deliver(tx: &SyncSender<Message>, stats: &Arc<Stats>, msg: Message) {
             stats.delivered.fetch_add(1, Ordering::Relaxed);
         }
         Err(TrySendError::Full(_)) => {
-            stats.dropped.fetch_add(1, Ordering::Relaxed);
+            stats.dropped_full.fetch_add(1, Ordering::Relaxed);
         }
         Err(TrySendError::Disconnected(_)) => {
-            stats.dropped.fetch_add(1, Ordering::Relaxed);
+            stats.dropped_disconnected.fetch_add(1, Ordering::Relaxed);
         }
     }
 }
@@ -397,18 +444,97 @@ fn udp_recv_loop_linux(
 
 #[cfg(target_os = "linux")]
 fn sockaddr_to_addr(buf: &[u8]) -> SocketAddr {
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-    // Minimal decode of sockaddr_in / sockaddr_in6.
-    if buf.len() >= 4 && (buf[1] == libc::AF_INET as u8) {
+    // The family byte is at offset 1 of the kernel sockaddr; the rest is the
+    // address body. A short/unknown buffer falls back to an unspecified address
+    // rather than reading past the end of `buf`.
+    decode_sockaddr(buf.get(1).copied().unwrap_or(0), buf)
+        .unwrap_or_else(|| SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, 0)))
+}
+
+// `sa_family` byte values. On Linux we mirror the kernel constants; elsewhere
+// (where `libc` does not expose socket families) we hard-code the conventional
+// values so the platform-independent decode path can still be unit-tested.
+#[cfg(target_os = "linux")]
+const SOCKADDR_AF_INET: u8 = libc::AF_INET as u8;
+#[cfg(target_os = "linux")]
+const SOCKADDR_AF_INET6: u8 = libc::AF_INET6 as u8;
+#[cfg(not(target_os = "linux"))]
+#[allow(dead_code)]
+const SOCKADDR_AF_INET: u8 = 2;
+#[cfg(not(target_os = "linux"))]
+#[allow(dead_code)]
+const SOCKADDR_AF_INET6: u8 = 23;
+
+/// Platform-independent decode of a raw `sockaddr_*` body (`buf` starts at the
+/// family byte). Returns `None` if the buffer is too short for the declared
+/// address family, guarding against out-of-bounds reads in `sockaddr_to_addr`.
+#[allow(dead_code)]
+fn decode_sockaddr(family: u8, buf: &[u8]) -> Option<SocketAddr> {
+    use std::net::{Ipv4Addr, Ipv6Addr};
+    if family == SOCKADDR_AF_INET {
+        // sockaddr_in: port at 2..4, IPv4 at 4..8.
+        if buf.len() < 8 {
+            return None;
+        }
         let port = u16::from_be_bytes([buf[2], buf[3]]);
         let ip = Ipv4Addr::new(buf[4], buf[5], buf[6], buf[7]);
-        SocketAddr::from((ip, port))
-    } else if buf.len() >= 8 && (buf[1] == libc::AF_INET6 as u8) {
+        Some(SocketAddr::from((ip, port)))
+    } else if family == SOCKADDR_AF_INET6 {
+        // sockaddr_in6: port at 2..4, IPv6 at 8..24.
+        if buf.len() < 24 {
+            return None;
+        }
         let port = u16::from_be_bytes([buf[2], buf[3]]);
         let mut oct = [0u8; 16];
         oct.copy_from_slice(&buf[8..24]);
-        SocketAddr::from((Ipv6Addr::from(oct), port))
+        Some(SocketAddr::from((Ipv6Addr::from(oct), port)))
     } else {
-        SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+
+    #[test]
+    fn decode_sockaddr_rejects_short_ipv4() {
+        // sockaddr_in needs >= 8 bytes after the family byte.
+        let buf = [0u8; 4];
+        assert!(decode_sockaddr(SOCKADDR_AF_INET, &buf).is_none());
+    }
+
+    #[test]
+    fn decode_sockaddr_rejects_short_ipv6() {
+        // sockaddr_in6 needs >= 24 bytes after the family byte.
+        let buf = [0u8; 16];
+        assert!(decode_sockaddr(SOCKADDR_AF_INET6, &buf).is_none());
+    }
+
+    #[test]
+    fn decode_sockaddr_decodes_ipv4() {
+        let mut buf = [0u8; 8];
+        buf[0] = SOCKADDR_AF_INET;
+        buf[2..4].copy_from_slice(&8080u16.to_be_bytes());
+        buf[4..8].copy_from_slice(&[127, 0, 0, 1]);
+        let sa = decode_sockaddr(SOCKADDR_AF_INET, &buf).unwrap();
+        assert_eq!(sa, SocketAddr::from((Ipv4Addr::new(127, 0, 0, 1), 8080)));
+    }
+
+    #[test]
+    fn decode_sockaddr_decodes_ipv6() {
+        let mut buf = [0u8; 24];
+        buf[0] = SOCKADDR_AF_INET6;
+        buf[2..4].copy_from_slice(&9090u16.to_be_bytes());
+        buf[8..24].copy_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+        let sa = decode_sockaddr(SOCKADDR_AF_INET6, &buf).unwrap();
+        assert_eq!(sa, SocketAddr::from((Ipv6Addr::LOCALHOST, 9090)));
+    }
+
+    #[test]
+    fn decode_sockaddr_unknown_family_is_none() {
+        let buf = [0u8; 32];
+        assert!(decode_sockaddr(0x7f, &buf).is_none());
     }
 }

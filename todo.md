@@ -96,9 +96,42 @@ License: MIT OR Apache-2.0 · TPT Solutions
 - [x] API docs (`cargo doc`) polish pass per crate — 0 intra-doc warnings across workspace
 
 ## Phase 11 — CI/CD & Release
-- [ ] CI pipeline: build, test, lint (`clippy`, `fmt`), audit, fuzz smoke tests
-- [ ] Cross-platform build matrix (Linux primary for `SO_RXQ_OVFL`; document platform gaps)
-- [ ] Versioning strategy across workspace crates (independent vs lockstep)
-- [ ] crates.io metadata (description, keywords, categories, license fields) per crate
-- [ ] Publish workflow (`cargo publish` order respecting inter-crate dependencies)
-- [ ] Tag/release process + CHANGELOG conventions
+- [x] CI pipeline: build, test, lint (`clippy`, `fmt`), audit, fuzz smoke tests (`.github/workflows/ci.yml`)
+- [x] Cross-platform build matrix (Linux primary for `SO_RXQ_OVFL`; document platform gaps — `PLATFORMS.md`)
+- [x] Versioning strategy across workspace crates (independent vs lockstep — `VERSIONING.md`, lockstep)
+- [x] crates.io metadata (description, keywords, categories, license fields, changelogs) per crate
+- [x] Publish workflow (`cargo publish` order respecting inter-crate dependencies) — `.github/workflows/publish.yml`
+- [x] Tag/release process + CHANGELOG conventions — `VERSIONING.md` (lockstep), tag `v*`, `CHANGELOG.md` per crate
+
+## Phase 12 — Security Hardening (audit findings, 2026-08-13)
+- [x] `tpt-syslog-server/src/framing.rs`: cap octet-counting length + LF buffer growth (`max_frame_len`), use `checked_add` for `start + len`, return `FrameTooLarge` error instead of panicking/unbounded buffering
+- [x] `tpt-syslog-server/src/server.rs`: add `max_connections` cap to `ServerConfig`, reject connections over the limit in `tcp_accept_loop`, wire `max_frame_len` into `TcpDecoder::new()`, close connection on `FrameTooLarge`
+- [x] `tpt-syslog-server/src/stats.rs`: add `rejected_connections` counter; split `dropped` into `dropped_full` / `dropped_disconnected`
+- [x] `tpt-syslog-server/src/server.rs`: fix `sockaddr_to_addr` bounds-check gap (IPv4 needs `buf.len() >= 8`, IPv6 needs `>= 24`) + regression test with short buffers
+- [x] `tpt-otlp/src/grpc.rs`: add `ClientTlsConfig` for `https://` endpoints (tonic `tls`/`tls-roots` features), inject `ExporterConfig.headers` as gRPC metadata instead of ignoring them
+- [x] `tpt-otlp/src/exporter.rs`: warn/hard-error (`require_tls` flag) on auth headers sent over `http://`; replace `#[derive(Debug)]` on `ExporterConfig` with a manual impl that redacts header values
+- [x] `tpt-telemetry-schema/src/parser.rs`: replace `.next().unwrap()` calls on pest iterators with proper `SchemaError::MalformedAst` returns
+- [x] `tpt-otlp/src/grpc.rs`: fix `time_unix_nano.parse().unwrap_or(0)` silently defaulting to epoch-0
+- [x] `tpt-telemetry-core/src/lib.rs`: `StreamReader::next_line` — distinguish genuine I/O errors from EOF (expose `last_error()`)
+- [x] Regression tests: oversized octet-count frame rejection, connection-flood against `max_connections`; re-run `syslog_framing` fuzz target after the framing changes
+- [x] `cargo test --workspace --all-features` + `cargo clippy --workspace --all-targets --all-features -D warnings` clean after all of the above
+
+## Phase 13 — Unified Daemon Binary (`tpt-daemon`)
+- [x] Scaffold new binary crate `tpt-daemon`, add to workspace members
+- [x] TOML config (`toml` dep) — `DaemonConfig` with `[schema]`/`[syslog.udp]`/`[syslog.tcp]`/`[otlp]`/`[otlp.headers]`/`[metrics]`/`[logging]`, `${ENV_VAR}` interpolation for secrets, conversion into `ServerConfig`/`ExporterConfig`
+- [x] Logging via `tracing` + `tracing-subscriber` (first logging dep in the workspace)
+- [x] Cross-platform signal handling via `ctrlc`, reusing `SyslogServer::stop()`
+- [x] Main loop: syslog receive → UTF-8 decode → `tpt_telemetry_core::Parser` → batched `tpt_otlp::Exporter::export()`
+- [x] Manual `--config <path>` CLI flag (no `clap`, matches `tpt-inference` style)
+- [x] Integration test: UDP datagram in → parsed → delivered to a stub local HTTP collector
+- [x] `src/metrics_http.rs`: hand-rolled `TcpListener` HTTP/1.1 responder — `GET /metrics` (Prometheus text format from `SyslogServer::stats()` + daemon counters), `GET /healthz` (heartbeat-based readiness)
+
+## Phase 14 — Packaging (Docker + systemd)
+- [x] Root `Dockerfile`: multi-stage build (`rust:stable-slim` → `distroless/cc`), non-root user, `EXPOSE 514/udp 514/tcp 9464`
+- [x] `.dockerignore`
+- [x] `packaging/tpt-daemon.service` — hardened systemd unit (`CAP_NET_BIND_SERVICE`, `DynamicUser`, `ProtectSystem=strict`, etc.)
+- [x] `packaging/tpt-daemon.example.toml`
+
+## Phase 15 — Documentation Fixes
+- [x] `ARCHITECTURE.md`: remove stale "planned" language for `tpt-syslog-server`/`tpt-inference`/OTLP export, add missing `tpt-otlp` entry, add `tpt-daemon` once Phase 13 lands
+- [x] Add root `SECURITY.md` (supported versions, vulnerability reporting via GitHub Security Advisories, `cargo-audit` pointer)

@@ -15,4 +15,11 @@ pub enum OtlpError {
     /// All retry attempts were exhausted.
     #[error("export failed after {0} retries: {1}")]
     RetriesExhausted(usize, String),
+    /// Auth/secret headers were supplied over a plaintext (`http://`) transport
+    /// while `require_tls` was set, risking credential leakage.
+    #[error("auth headers sent over insecure transport: {0}")]
+    InsecureTransport(String),
+    /// A log record carried a timestamp that could not be parsed as nanoseconds.
+    #[error("invalid timestamp: {0}")]
+    InvalidTimestamp(String),
 }
