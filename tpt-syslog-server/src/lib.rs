@@ -14,7 +14,7 @@ mod stats;
 
 pub use framing::{FrameError, TcpFraming};
 pub use message::{Framing, Message, Transport};
-pub use server::{ServerConfig, SyslogServer};
+pub use server::{decode_sockaddr, parse_rxq_ovfl, ServerConfig, SyslogServer};
 pub use stats::Stats;
 
 /// Default ring-buffer capacity (in messages) used for backpressure.

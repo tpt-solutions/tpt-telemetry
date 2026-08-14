@@ -47,10 +47,12 @@ Please include:
   redacted from `Debug` output.
 - **Dependency auditing**: `cargo audit` baseline is tracked in
   `cargo-audit-baseline.json` (0 vulnerabilities / 203 deps). Run
-  `cargo audit` in CI.
+  `cargo audit` in CI. `cargo deny` enforces the license allow-list, bans, and
+  duplicate-version rules via `deny.toml`.
 
 ## Supply Chain
 
 - All crates are released under `MIT OR Apache-2.0`.
-- CI runs `cargo audit`, `clippy -D warnings`, `rustfmt --check`, and the test
-  suite on every push/PR (see `.github/workflows/ci.yml`).
+- CI runs `cargo audit`, `cargo deny`, `clippy -D warnings`,
+  `rustfmt --check`, and the test suite on every push/PR
+  (see `.github/workflows/ci.yml`).

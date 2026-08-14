@@ -34,6 +34,12 @@ path = "fuzz_targets/syslog_framing.rs"
 test = false
 doc = false
 
+[[bin]]
+name = "syslog_udp"
+path = "fuzz_targets/syslog_udp.rs"
+test = false
+doc = false
+
 # Standalone workspace so cargo at the repo root does not try to build fuzz
 # targets (which require the nightly toolchain + `cargo fuzz`).
 [workspace]

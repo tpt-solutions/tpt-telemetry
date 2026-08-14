@@ -42,7 +42,12 @@ require_tls = false
   # Authorization = "Bearer ${OTLP_TOKEN}"
 
 [metrics]
-# Prometheus metrics on /metrics and health on /healthz.
+# Prometheus metrics on /metrics and health on /healthz. These endpoints are
+# unauthenticated and currently expose only aggregate counters (no per-message
+# payloads), but they should not be exposed to untrusted networks. Bind to
+# 127.0.0.1 (or a private interface) and rely on a network policy / reverse
+# proxy for any wider exposure:
+#   bind = "127.0.0.1:9464"
 bind = "0.0.0.0:9464"
 
 [logging]

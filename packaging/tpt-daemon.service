@@ -28,7 +28,10 @@ ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictNamespaces=true
 LockPersonality=true
-MemoryDenyWriteExecute=false
+# Deny memory that is both writable and executable. The daemon is pure Rust
+# (tokio/tonic/ureq) with no JIT or runtime code-generation, so no mapping ever
+# needs W^X — keeping this enabled is strictly safer than the previous `false`.
+MemoryDenyWriteExecute=true
 RestrictSUIDSGID=true
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM

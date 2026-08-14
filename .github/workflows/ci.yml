@@ -75,6 +75,52 @@ jobs:
       # the 0.1.0 cut (0 vulns / 203 deps, 2026-08-13). Review it whenever the
       # dependency tree changes rather than silently bumping the baseline.
 
+  cargo-deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - name: License / advisory / ban checks
+        # `deny.toml` sets the policy (see repo root). Fails the build on any
+        # forbidden license, advisory, or duplicate crate version.
+        run: cargo deny --all-features check
+
+  otel-collector:
+    name: otel-collector integration
+    runs-on: ubuntu-latest
+    # Provide a real OpenTelemetry Collector for the gated
+    # `exported_to_real_otel_collector` integration test (closes the deferred
+    # Phase 7 live-collector item). The default image entrypoint reads its
+    # config from /etc/otelcol/config.yaml, which we mount below.
+    services:
+      otel-collector:
+        image: otel/opentelemetry-collector:0.103.0
+        ports:
+          - 4317:4317
+          - 4318:4318
+          - 8889:8889
+        volumes:
+          - ${{ github.workspace }}/packaging/otel-collector.yaml:/etc/otelcol/config.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Wait for collector
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8889/metrics >/dev/null 2>&1; then
+              echo "collector up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "collector did not start"; docker logs otel-collector || true; exit 1
+      - name: Run live-collector integration test
+        env:
+          TPT_OTEL_COLLECTOR_TEST: "1"
+        run: cargo test -p tpt-daemon --test integration exported_to_real_otel_collector
+
   fuzz:
     name: fuzz smoke
     runs-on: ubuntu-latest

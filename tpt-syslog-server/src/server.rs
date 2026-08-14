@@ -423,8 +423,15 @@ fn udp_recv_loop_linux(
         while !cmsg_ptr.is_null() {
             let cm = unsafe { &*cmsg_ptr };
             if cm.cmsg_level == SOL_SOCKET && cm.cmsg_type == SCM_RXQ_OVFL {
-                let v = unsafe { *(CMSG_DATA(cm) as *const u32) };
-                stats.kernel_overflow.store(v as u64, Ordering::Relaxed);
+                // The payload length is `cmsg_len - CMSG_LEN(0)`; expose it as a
+                // slice and parse through the bounds-checked helper so we never
+                // read past the end of the control buffer.
+                let data_len =
+                    (cm.cmsg_len as usize).saturating_sub(unsafe { CMSG_LEN(0) as usize });
+                let data = unsafe { std::slice::from_raw_parts(CMSG_DATA(cm), data_len) };
+                if let Some(v) = parse_rxq_ovfl(data) {
+                    stats.kernel_overflow.store(v as u64, Ordering::Relaxed);
+                }
             }
             cmsg_ptr = unsafe { CMSG_NXTHDR(&hdr, cmsg_ptr) };
         }
@@ -468,8 +475,23 @@ const SOCKADDR_AF_INET6: u8 = 23;
 /// Platform-independent decode of a raw `sockaddr_*` body (`buf` starts at the
 /// family byte). Returns `None` if the buffer is too short for the declared
 /// address family, guarding against out-of-bounds reads in `sockaddr_to_addr`.
-#[allow(dead_code)]
-fn decode_sockaddr(family: u8, buf: &[u8]) -> Option<SocketAddr> {
+/// Parse the `SCM_RXQ_OVFL` ancillary payload (a host-endian `u32` of the
+/// kernel RX-queue overflow count) from a raw cmsg data buffer. Returns `None`
+/// if the buffer is too short — guarding the unchecked `*(CMSG_DATA as *const
+/// u32)` read it replaces.
+pub fn parse_rxq_ovfl(cmsg: &[u8]) -> Option<u32> {
+    if cmsg.len() < std::mem::size_of::<u32>() {
+        return None;
+    }
+    let mut buf = [0u8; 4];
+    buf.copy_from_slice(&cmsg[..4]);
+    Some(u32::from_ne_bytes(buf))
+}
+
+/// Platform-independent decode of a raw `sockaddr_*` body (`buf` starts at the
+/// family byte). Returns `None` if the buffer is too short for the declared
+/// address family, guarding against out-of-bounds reads in `sockaddr_to_addr`.
+pub fn decode_sockaddr(family: u8, buf: &[u8]) -> Option<SocketAddr> {
     use std::net::{Ipv4Addr, Ipv6Addr};
     if family == SOCKADDR_AF_INET {
         // sockaddr_in: port at 2..4, IPv4 at 4..8.
@@ -497,6 +519,19 @@ fn decode_sockaddr(family: u8, buf: &[u8]) -> Option<SocketAddr> {
 mod tests {
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+
+    #[test]
+    fn parse_rxq_ovfl_reads_u32() {
+        let mut cmsg = [0u8; 4];
+        cmsg.copy_from_slice(&1234u32.to_ne_bytes());
+        assert_eq!(parse_rxq_ovfl(&cmsg), Some(1234));
+    }
+
+    #[test]
+    fn parse_rxq_ovfl_rejects_short_buffer() {
+        assert_eq!(parse_rxq_ovfl(&[0u8; 3]), None);
+        assert_eq!(parse_rxq_ovfl(&[]), None);
+    }
 
     #[test]
     fn decode_sockaddr_rejects_short_ipv4() {

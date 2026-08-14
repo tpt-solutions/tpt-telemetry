@@ -7,11 +7,17 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/tpt-daemon"
+readme = "README.md"
 rust-version.workspace = true
 
 [[bin]]
-name = "tpt-daemon"
+name = "tpt_daemon"
 path = "src/main.rs"
+
+[[bin]]
+name = "tpt-send-log"
+path = "src/bin/send_log.rs"
 
 [lib]
 name = "tpt_daemon"

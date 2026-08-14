@@ -60,11 +60,19 @@ impl Parser {
     }
 }
 
+/// Default per-line size ceiling for [`StreamReader`] (64 MiB). Lines longer
+/// than this without a delimiter are treated as malformed input: the reader
+/// records an error and stops, mirroring the TCP framer's `max_frame_len`
+/// ceiling that bounds unbounded buffer growth on the network path.
+pub const DEFAULT_MAX_LINE_LEN: usize = 64 * 1024 * 1024;
+
 /// A chunked, allocation-reusing streaming reader over any [`Read`] source.
 ///
 /// Lines are framed (newline-delimited, with optional trailing `\r`) by scanning
 /// a single reused buffer; the buffer is grown only when a line exceeds its
 /// current capacity, so once warmed up the framing loop performs no allocation.
+/// Growth is bounded by [`StreamReader::max_line_len`]: a line that exceeds the
+/// ceiling without a delimiter is rejected rather than buffering without bound.
 pub struct StreamReader<R> {
     reader: R,
     buf: Vec<u8>,
@@ -72,6 +80,7 @@ pub struct StreamReader<R> {
     end: usize,
     done: bool,
     last_error: Option<io::Error>,
+    max_line_len: usize,
 }
 
 impl<R: Read> StreamReader<R> {
@@ -89,7 +98,23 @@ impl<R: Read> StreamReader<R> {
             end: 0,
             done: false,
             last_error: None,
+            max_line_len: DEFAULT_MAX_LINE_LEN,
         }
+    }
+
+    /// Override the per-line size ceiling. A line (the un-framed region of the
+    /// buffer without a trailing newline) longer than `max_line_len` bytes is
+    /// rejected: the reader records an [`io::ErrorKind::InvalidData`] error,
+    /// stops, and returns `None`; callers can distinguish this from a clean EOF
+    /// via [`StreamReader::last_error`].
+    pub fn with_max_line_len(mut self, max_line_len: usize) -> Self {
+        self.max_line_len = max_line_len.max(1);
+        self
+    }
+
+    /// The configured per-line size ceiling.
+    pub fn max_line_len(&self) -> usize {
+        self.max_line_len
     }
 
     /// Return the next line as a borrowed slice into the internal buffer, or
@@ -117,6 +142,20 @@ impl<R: Read> StreamReader<R> {
                     self.start = self.end;
                     return Some(&self.buf[s..e]);
                 }
+                return None;
+            }
+
+            // No newline yet: if the current un-framed region already exceeds the
+            // line-length ceiling, reject it as malformed input rather than
+            // growing the buffer without bound (mirrors the TCP framer's
+            // `max_frame_len` backstop). Surface the condition via `last_error`
+            // so callers can tell it apart from a clean EOF.
+            if self.end - self.start > self.max_line_len {
+                self.last_error = Some(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "line exceeds max_line_len without a delimiter",
+                ));
+                self.done = true;
                 return None;
             }
 
@@ -303,6 +342,35 @@ mod tests {
         assert!(r.next_line().is_none());
         assert!(r.last_error().is_some());
         assert_eq!(r.last_error().unwrap().to_string(), "boom");
+    }
+
+    #[test]
+    fn stream_reader_rejects_overlong_line() {
+        // A line with no delimiter that exceeds the ceiling is rejected.
+        let data = vec![b'a'; 1024];
+        let mut r = StreamReader::new(Cursor::new(&data[..])).with_max_line_len(64);
+        // The whole buffer is one undelimited line of 1024 bytes > 64.
+        let got = r.next_line();
+        assert!(got.is_none());
+        let err = r.last_error().expect("error should be recorded");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(r.max_line_len(), 64);
+    }
+
+    #[test]
+    fn stream_reader_respects_max_line_len_across_chunks() {
+        // The ceiling is checked on the un-framed region regardless of how the
+        // bytes arrive; a delimiter before the limit still yields the line.
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"short\n");
+        buf.extend_from_slice(b"loooooong-no-newline-yet");
+        let mut r = StreamReader::with_capacity(Cursor::new(&buf[..]), 4).with_max_line_len(8);
+        assert_eq!(r.next_line().unwrap(), b"short");
+        assert!(r.next_line().is_none());
+        assert_eq!(
+            r.last_error().map(|e| e.kind()),
+            Some(io::ErrorKind::InvalidData)
+        );
     }
 
     #[cfg(feature = "alloc-counter")]

@@ -4,7 +4,7 @@
 //! stream is chunked or which framing mode is selected.
 
 use libfuzzer_sys::fuzz_target;
-use tpt_syslog_server::framing::{TcpDecoder, TcpFraming};
+use tpt_syslog_server::framing::{TcpDecoder, TcpFraming, MAX_FRAME_LEN};
 
 fuzz_target!(|data: &[u8]| {
     for mode in [
@@ -12,7 +12,7 @@ fuzz_target!(|data: &[u8]| {
         TcpFraming::OctetCounting,
         TcpFraming::NonTransparent,
     ] {
-        let mut decoder = TcpDecoder::new(mode);
+        let mut decoder = TcpDecoder::new(mode, MAX_FRAME_LEN);
         let mut frames = Vec::new();
         // Feed in tiny 1–4 byte chunks to stress incremental decoding.
         for chunk in data.chunks(3) {

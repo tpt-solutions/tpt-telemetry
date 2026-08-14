@@ -1,0 +1,48 @@
+# Local observability stack for tpt-telemetry.
+#
+#   docker compose up --build
+#
+# Brings up:
+#   - tpt-daemon        syslog (514/udp+tcp) -> parse -> OTLP export, metrics on 9464
+#   - otel-collector    receives OTLP (4317/4318), prints records via debug exporter
+#   - prometheus        scrapes the daemon + collector and serves a viewer on 9090
+#
+# Point a sender atUDP/TCP 514 (e.g. `cargo run -p tpt-daemon --bin tpt-send-log
+# -- --udp 127.0.0.1:514`) and watch the collector logs / Prometheus UI.
+
+services:
+  tpt-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "514:514/udp"
+      - "514:514/tcp"
+      - "9464:9464"
+    volumes:
+      # Compose-specific config points OTLP at the `otel-collector` service name
+      # and binds syslog/metrics on all interfaces inside the container.
+      - ./packaging/tpt-daemon.compose.toml:/etc/tpt-daemon/tpt-daemon.toml:ro
+      - ./examples/schemas/cisco_asa.tpt-log:/etc/tpt-daemon/schema.tpt-log:ro
+    depends_on:
+      - otel-collector
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.103.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./packaging/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./packaging/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - tpt-daemon
+      - otel-collector

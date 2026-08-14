@@ -1,0 +1,27 @@
+# OpenTelemetry Collector config used by:
+#   - the docker-compose.yml (Phase 18) local stack
+#   - the CI `otel-collector` integration job (Phase 16), mounted to
+#     /etc/otelcol/config.yaml so the default image entrypoint picks it up.
+#
+# Receives OTLP over gRPC (4317) and HTTP/JSON (4318), and dumps every record
+# to stdout via the `debug` exporter (useful when eyeballing the pipeline).
+# Self-metrics (incl. otelcol_receiver_accepted_log_records) are served on
+# 0.0.0.0:8889/metrics for the integration test to assert against.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      exporters: [debug]

@@ -259,4 +259,33 @@ mod tests {
         );
         assert!(s.contains("redacted"), "Debug should mark headers redacted");
     }
+
+    #[test]
+    fn transport_error_does_not_leak_headers() {
+        // A failed export must surface an error whose message never echoes
+        // secret header values (mirrors `debug_redacts_header_values`). Point at
+        // a closed port so every attempt fails fast.
+        let sentinel = "do-not-leak-this-token-12345";
+        let cfg = ExporterConfig {
+            transport: Transport::Http,
+            endpoint: "http://127.0.0.1:1".into(),
+            headers: vec![("Authorization".into(), format!("Bearer {sentinel}"))]
+                .into_iter()
+                .collect(),
+            max_retries: 0,
+            timeout_ms: 200,
+            ..Default::default()
+        };
+        let e = Exporter::new(cfg);
+        let rec = Record {
+            format: "X",
+            fields: vec![],
+        };
+        let err = e.export(std::slice::from_ref(&rec)).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            !msg.contains(sentinel),
+            "secret header value leaked into transport error: {msg}"
+        );
+    }
 }

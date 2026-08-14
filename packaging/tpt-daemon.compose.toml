@@ -1,0 +1,41 @@
+# tpt-daemon config for the docker-compose stack (see docker-compose.yml).
+#
+# Differences from tpt-daemon.example.toml:
+#   - OTLP endpoint points at the compose `otel-collector` service name
+#   - syslog + metrics bind on all interfaces so the host can reach them
+
+[schema]
+path = "/etc/tpt-daemon/schema.tpt-log"
+
+[syslog]
+ring_capacity = 65536
+read_timeout_ms = 250
+
+  [syslog.udp]
+  bind = "0.0.0.0:514"
+
+  [syslog.tcp]
+  bind = "0.0.0.0:514"
+  framing = "auto"
+  max_frame_len = 1048576
+  max_connections = 1024
+
+[otlp]
+endpoint = "http://otel-collector:4318"
+transport = "http"
+batch_size = 1024
+timeout_ms = 10000
+max_retries = 3
+base_backoff_ms = 100
+scope_name = "tpt-daemon"
+require_tls = false
+
+  [otlp.headers]
+  # Authorization = "Bearer ${OTLP_TOKEN}"
+
+[metrics]
+# Inside the container this is reachable by prometheus at tpt-daemon:9464.
+bind = "0.0.0.0:9464"
+
+[logging]
+level = "info"
