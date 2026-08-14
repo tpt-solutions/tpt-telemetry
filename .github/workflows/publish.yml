@@ -110,7 +110,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # Aggregate the per-crate changelogs into the release body.
           body: |
