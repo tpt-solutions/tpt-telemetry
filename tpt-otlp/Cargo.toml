@@ -15,6 +15,7 @@ rust-version.workspace = true
 
 [dependencies]
 tpt-telemetry-compiler = { workspace = true }
+tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = "1"
 thiserror.workspace = true
@@ -31,3 +32,4 @@ grpc = ["dep:opentelemetry-proto", "dep:tonic", "dep:tokio"]
 tls = ["grpc", "tonic/tls", "tonic/tls-roots"]
 
 [dev-dependencies]
+tracing-subscriber = { workspace = true }

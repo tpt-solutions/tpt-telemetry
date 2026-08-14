@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tpt-daemon.fullname" . }}
+  labels:
+    {{- include "tpt-daemon.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.service.labels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "tpt-daemon.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: syslog-udp
+      port: {{ .Values.service.udpPort }}
+      targetPort: syslog-udp
+      protocol: UDP
+    - name: syslog-tcp
+      port: {{ .Values.service.tcpPort }}
+      targetPort: syslog-tcp
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP

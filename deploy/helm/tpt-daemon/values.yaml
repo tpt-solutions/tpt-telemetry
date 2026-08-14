@@ -1,0 +1,170 @@
+# Default values for the tpt-daemon chart.
+#
+# Out of the box this deploys one replica that listens on syslog 514 (UDP+TCP),
+# parses the bundled Cisco ASA schema, and exports to an OTLP endpoint you
+# configure below. Secrets (OTLP bearer token) are injected via the `otlp.headers`
+# map -> Kubernetes Secret, never written into the ConfigMap.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/tpt-solutions/tpt-telemetry/tpt-daemon
+  pullPolicy: IfNotPresent
+  # Defaults to .Chart.AppVersion when empty.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Pod security context.
+# The daemon needs CAP_NET_BIND_SERVICE to bind privileged ports (514). It runs
+# as a non-root user (distroless `nonroot`, uid 65532) and drops all other caps.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# -- Daemon configuration.
+# Rendered into a ConfigMap and mounted at /etc/tpt-daemon/tpt-daemon.toml.
+# `${ENV_VAR}` references inside the values are NOT expanded by Helm; the daemon
+# performs its own interpolation at startup from the container environment
+# (set via `env` / `secretEnv`).
+config:
+  schema:
+    # Path of the schema file inside the pod (mounted from `schema` below).
+    path: /etc/tpt-daemon/schema.tpt-log
+  syslog:
+    udp:
+      bind: "0.0.0.0:514"
+    tcp:
+      bind: "0.0.0.0:514"
+      framing: auto
+      max_frame_len: 1048576
+      max_connections: 1024
+    ring_capacity: 65536
+    read_timeout_ms: 250
+  otlp:
+    # Point at your in-cluster collector, e.g. http://otel-collector:4318.
+    endpoint: "http://otel-collector:4318"
+    transport: http
+    batch_size: 1024
+    timeout_ms: 10000
+    max_retries: 3
+    base_backoff_ms: 100
+    scope_name: tpt-daemon
+    require_tls: false
+    # Header values are redacted in logs. Provide secrets via `secretEnv` below;
+    # reference them here as ${OTLP_TOKEN} and they are interpolated at runtime.
+    headers: {}
+  metrics:
+    # The /metrics and /healthz endpoints are unauthenticated. Bind loopback
+    # inside the pod and restrict external access with the NetworkPolicy.
+    bind: "127.0.0.1:9464"
+  logging:
+    level: info
+
+# -- Schema file mounted alongside the config.
+# Defaults to the bundled Cisco ASA example schema. Override `content` to supply
+# your own `.tpt-log` schema.
+schema:
+  filename: schema.tpt-log
+  content: |
+    // Cisco ASA syslog schema (see spec.txt section 4).
+    format CiscoASA {
+      pattern: "%ASA-%{severity:int}-%{msg_id:int}: %{message:string}";
+      coerce severity to enum { EMERGENCY, ALERT, CRITICAL, ERROR, WARNING, NOTICE, INFO, DEBUG };
+      redact message with mask;
+    }
+
+# -- Container environment. Plain (non-secret) variables.
+env:
+  RUST_BACKTRACE: "1"
+
+# -- Secret-backed environment variables, rendered as ${NAME} in config above.
+# Each entry becomes a reference to a key in `existingSecret` (or an auto-created
+# Secret from `secretEnv` literals). Values here are rendered into a Secret — keep
+# them out of source control, or prefer an externally-managed secret.
+existingSecret: ""
+secretEnv: {}
+  # OTLP_TOKEN: "changeme"
+
+# -- Kubernetes Service exposing syslog + metrics.
+service:
+  type: ClusterIP
+  udpPort: 514
+  tcpPort: 514
+  metricsPort: 9464
+  # metrics is only exposed in-cluster by default; scrape via the pod IP or this
+  # service port from Prometheus. Keep it off public LoadBalancers.
+  annotations: {}
+  labels: {}
+
+# -- Network policy restricting the unauthenticated metrics endpoint.
+# When enabled, only pods matching `metrics.allowedPodSelector` (e.g. the
+# Prometheus namespace) may reach the metrics port. Syslog ports stay open to
+# the namespace.
+networkPolicy:
+  enabled: true
+  metrics:
+    enabled: true
+    # Label selector (namespace-agnostic) of pods allowed to scrape /metrics.
+    allowedPodSelector:
+      matchLabels:
+        app.kubernetes.io/name: prometheus
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# -- Pod disruption budget for HA deployments (replicaCount > 1).
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+# -- Liveness/readiness probes use the daemon's own --healthcheck subcommand,
+# which probes GET /healthz on the metrics port (loopback).
+probes:
+  liveness:
+    initialDelaySeconds: 5
+    periodSeconds: 30
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 2
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+podAnnotations: {}
+podLabels: {}

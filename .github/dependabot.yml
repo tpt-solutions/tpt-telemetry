@@ -1,0 +1,20 @@
+# Dependabot configuration for tpt-telemetry.
+#
+# Scope: GitHub Actions only. Rust/Cargo dependency updates are handled by
+# Renovate (renovate.json) to avoid duplicate PRs for the same ecosystem.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    # Group routine action bumps into a single PR.
+    groups:
+      actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "github-actions"

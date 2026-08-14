@@ -1,0 +1,21 @@
+apiVersion: v2
+name: tpt-daemon
+description: Helm chart for the tpt-telemetry unified syslog -> OTLP daemon
+type: application
+# Lockstep versioning with the workspace crates (see VERSIONING.md).
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/tpt-solutions/tpt-telemetry
+sources:
+  - https://github.com/tpt-solutions/tpt-telemetry
+maintainers:
+  - name: TPT Solutions
+keywords:
+  - telemetry
+  - syslog
+  - otlp
+  - opentelemetry
+  - observability
+annotations:
+  # Rendered templates are plain Kubernetes YAML; no custom CRDs.
+  category: observability

@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tpt-daemon.fullname" . }}-config
+  labels:
+    {{- include "tpt-daemon.labels" . | nindent 4 }}
+data:
+  tpt-daemon.toml: |
+    [schema]
+    path = {{ .Values.config.schema.path | quote }}
+
+    [syslog]
+    ring_capacity = {{ .Values.config.syslog.ring_capacity }}
+    read_timeout_ms = {{ .Values.config.syslog.read_timeout_ms }}
+
+      [syslog.udp]
+      bind = {{ .Values.config.syslog.udp.bind | quote }}
+
+      [syslog.tcp]
+      bind = {{ .Values.config.syslog.tcp.bind | quote }}
+      framing = {{ .Values.config.syslog.tcp.framing | quote }}
+      max_frame_len = {{ .Values.config.syslog.tcp.max_frame_len }}
+      max_connections = {{ .Values.config.syslog.tcp.max_connections }}
+
+    [otlp]
+    endpoint = {{ .Values.config.otlp.endpoint | quote }}
+    transport = {{ .Values.config.otlp.transport | quote }}
+    batch_size = {{ .Values.config.otlp.batch_size }}
+    timeout_ms = {{ .Values.config.otlp.timeout_ms }}
+    max_retries = {{ .Values.config.otlp.max_retries }}
+    base_backoff_ms = {{ .Values.config.otlp.base_backoff_ms }}
+    scope_name = {{ .Values.config.otlp.scope_name | quote }}
+    require_tls = {{ .Values.config.otlp.require_tls }}
+    {{- if .Values.config.otlp.headers }}
+    [otlp.headers]
+    {{- range $k, $v := .Values.config.otlp.headers }}
+    {{ $k }} = {{ $v | quote }}
+    {{- end }}
+    {{- end }}
+
+    [metrics]
+    bind = {{ .Values.config.metrics.bind | quote }}
+
+    [logging]
+    level = {{ .Values.config.logging.level | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tpt-daemon.fullname" . }}-schema
+  labels:
+    {{- include "tpt-daemon.labels" . | nindent 4 }}
+data:
+  {{ .Values.schema.filename }}: |
+    {{- .Values.schema.content | nindent 4 }}

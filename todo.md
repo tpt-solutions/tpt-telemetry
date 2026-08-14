@@ -14,7 +14,7 @@ License: MIT OR Apache-2.0 · TPT Solutions
 > - Phase 9: `tpt-inference` — provider trait + validate-and-retry loop, Claude/OpenAI/OpenRouter/Grok/Ollama providers, CLI, tests.
 > - Phase 10 slice: `ARCHITECTURE.md`, `SCHEMA_GUIDE.md`, example schemas (Cisco ASA / RFC5424 / CEF) + sample logs + end-to-end integration test; `cargo doc` polish (0 intra-doc warnings).
 > - Phase 8: Performance Validation — Criterion suite (grok engine, compiler parsers, e2e + throughput), zero-alloc CI gate, cargo-fuzz targets + fuzz-smoke tests, load harness (~1.72M lines/sec/core, above the 1M target), and `PERFORMANCE.md` report.
-> - Phase 11 (CI/CD & Release) is fully implemented: see the checked-off items below. Phase 7's live-collector integration test remains deferred (needs external OTLP collector) — tracked as a remaining task in Phase 16.
+> - Phase 11 (CI/CD & Release) is fully implemented: see the checked-off items below. Phase 7's live-collector integration test was closed in Phase 16 (Docker-based `otel-collector` CI test).
 
 ---
 
@@ -72,7 +72,7 @@ License: MIT OR Apache-2.0 · TPT Solutions
 - [x] Implement OTLP/HTTP+protobuf exporter
 - [x] Config-driven transport selection (gRPC vs HTTP)
 - [x] Batching/retry/backoff for exporters
-- [ ] Integration tests against a local OTLP collector (e.g. otel-collector in CI)
+- [x] Integration tests against a local OTLP collector (e.g. otel-collector in CI)
 
 ## Phase 8 — Performance Validation
 - [x] Criterion benchmark suite across grok engine, compiler-generated parsers, and end-to-end pipeline
@@ -136,19 +136,19 @@ License: MIT OR Apache-2.0 · TPT Solutions
 - [x] `ARCHITECTURE.md`: remove stale "planned" language for `tpt-syslog-server`/`tpt-inference`/OTLP export, add missing `tpt-otlp` entry, add `tpt-daemon` once Phase 13 lands
 
 ## Phase 16 — Correctness Fixes (2026-08-14 review)
-- [ ] Fix broken `fuzz/fuzz_targets/syslog_framing.rs`: `TcpDecoder::new(mode)` call has wrong arity vs. current `TcpDecoder::new(mode, max_frame_len)` signature — CI fuzz job is unfuzzing the frame-size-ceiling logic
-- [ ] Reconcile stale "Phases 11: not yet implemented" sentence in this file's session-progress note (line 17) — Phase 11 below is fully checked off; keep only the still-accurate Phase 7 live-collector note
+- [x] Fix broken `fuzz/fuzz_targets/syslog_framing.rs`: `TcpDecoder::new(mode)` call has wrong arity vs. current `TcpDecoder::new(mode, max_frame_len)` signature — CI fuzz job is unfuzzing the frame-size-ceiling logic
+- [x] Reconcile stale "Phases 11: not yet implemented" sentence in this file's session-progress note (line 17) — Phase 11 below is fully checked off; keep only the still-accurate Phase 7 live-collector note
 - [x] Add CI integration test against a real `otel-collector` (Docker), replacing/augmenting the stub-collector test in `tpt-daemon/tests/integration.rs` (closes deferred Phase 7 item)
 
 ## Phase 17 — Security Hardening (2026-08-14 review)
-- [ ] Add a fuzz target for the UDP `recvmsg`/cmsg-parsing unsafe path (`tpt-syslog-server/src/server.rs`) — highest-risk unsafe block, currently zero fuzz coverage
+- [x] Add a fuzz target for the UDP `recvmsg`/cmsg-parsing unsafe path (`tpt-syslog-server/src/server.rs`) — highest-risk unsafe block, currently zero fuzz coverage
 - [x] Add `deny.toml` + `cargo-deny check` CI step (license/bans/duplicate-version checks) to match `SECURITY.md`'s "Supply Chain" claim
-- [ ] Bound `StreamReader::next_line` (`tpt-telemetry-core/src/lib.rs`) with a `max_line_len` guard, mirroring the TCP framer's `max_frame_len`
+- [x] Bound `StreamReader::next_line` (`tpt-telemetry-core/src/lib.rs`) with a `max_line_len` guard, mirroring the TCP framer's `max_frame_len`
 - [x] Document/secure the metrics `/metrics` + `/healthz` endpoint (no auth, example config binds `0.0.0.0`) — recommend localhost bind or network policy
-- [ ] Extend `fuzz_targets/grok_engine.rs` to also fuzz the scanned *input text* against a fixed pattern set (ReDoS-style coverage), not just pattern compilation
+- [x] Extend `fuzz_targets/grok_engine.rs` to also fuzz the scanned *input text* against a fixed pattern set (ReDoS-style coverage), not just pattern compilation
 - [x] Add inline comment justifying `MemoryDenyWriteExecute=false` in `packaging/tpt-daemon.service` (or flip to `true` if not actually required)
 - [x] Add `HEALTHCHECK` instruction to root `Dockerfile` referencing `/healthz`
-- [ ] Add a test asserting `ureq`/`tonic` transport error strings logged via `tracing::warn!` never leak header/token content (mirrors `debug_redacts_header_values`)
+- [x] Add a test asserting `ureq`/`tonic` transport error strings logged via `tracing::warn!` never leak header/token content (mirrors `debug_redacts_header_values`)
 
 ## Phase 18 — Adoption & DX Tooling (2026-08-14 review)
 - [x] Rewrite README quick-start: runnable build/run commands, links to `ARCHITECTURE.md`/`SCHEMA_GUIDE.md`/`PLATFORMS.md`, add missing `tpt-otlp`/`tpt-daemon` workspace-table rows, CI badge
@@ -159,5 +159,12 @@ License: MIT OR Apache-2.0 · TPT Solutions
 - [x] Add root `CHANGELOG.md` for `tpt-daemon` (only crate missing one)
 - [x] Add GitHub Release automation step to `.github/workflows/publish.yml`
 - [x] Add Docker image build/publish step to CI (push to GHCR on tag)
-- [ ] Deferred/larger-scope, flagged for later prioritization: Helm chart/k8s manifests, cross-compiled release binaries (`cargo-dist`), dependabot/renovate config, code coverage reporting
+- [x] Deferred/larger-scope (now implemented, see Phase 19): Helm chart/k8s manifests (`deploy/helm/tpt-daemon`), cross-compiled release binaries (`cargo-dist` workspace metadata), dependabot/renovate config, code coverage reporting (`.github/workflows/coverage.yml` + `.codecov.yml`)
+
+## Phase 19 — Deferred/Larger-Scope Tooling (2026-08-14)
+- [x] **Helm chart / k8s manifests** — `deploy/helm/tpt-daemon/` with `Chart.yaml`, `values.yaml`, `templates/` (`_helpers.tpl`, `deployment`, `service`, `configmap` (config + schema), `secret`, `serviceaccount`, `networkpolicy` (metrics lockdown), `poddisruptionbudget`, `hpa`, `NOTES.txt`), `.helmignore`, and a chart `README.md`. Mirrors the systemd unit: non-root, `NET_BIND_SERVICE` only, read-only rootfs, loopback metrics bind behind a NetworkPolicy; secrets via `secretEnv` → `${ENV_VAR}` interpolation (no secrets in the ConfigMap).
+- [x] **Cross-compiled release binaries (`cargo-dist`)** — `[workspace.metadata.dist]` in `Cargo.toml` (linux/macos/windows x86_64 + aarch64 targets, shell + powershell installers, `publish-jobs = false` to defer crates.io to `publish.yml`). Generate the release workflow with `cargo dist init`.
+- [x] **Dependabot / Renovate config** — `.github/dependabot.yml` (GitHub Actions only) + root `renovate.json` (Cargo/Dockerfile/compose only), scoped so the two tools never open duplicate PRs for the same ecosystem.
+- [x] **Code coverage reporting** — `.github/workflows/coverage.yml` (`cargo llvm-cov --workspace --all-features` → lcov → Codecov upload) + `.codecov.yml` (ignore `target`/`fuzz`/`tests`/`benches`/`examples`, informational status gates). Requires a `CODECOV_TOKEN` repo secret to upload.
+
 - [x] Add root `SECURITY.md` (supported versions, vulnerability reporting via GitHub Security Advisories, `cargo-audit` pointer)

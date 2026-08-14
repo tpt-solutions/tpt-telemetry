@@ -1,0 +1,60 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "separateMajorMinor": true,
+  "prHourlyLimit": 4,
+  "prConcurrentLimit": 10,
+  "rangeStrategy": "bump",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "enabledManagers": [
+    "cargo",
+    "dockerfile",
+    "docker-compose"
+  ],
+  "packageRules": [
+    {
+      "description": "Group all patch-level Rust dependency bumps into one PR.",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "groupName": "cargo patches"
+    },
+    {
+      "description": "Group all minor-level Rust dependency bumps into one PR.",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "groupName": "cargo minors"
+    },
+    {
+      "description": "Keep the Rust toolchain version (rust-toolchain.toml) pinned and out of auto-bump.",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchDepPatterns": [
+        "rust-version",
+        "rust"
+      ],
+      "enabled": false
+    }
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on monday"
+    ]
+  }
+}

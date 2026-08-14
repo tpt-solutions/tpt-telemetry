@@ -1,0 +1,22 @@
+1. {{- if .Values.autoscaling.enabled }}
+2. apiVersion: autoscaling/v2
+3. kind: HorizontalPodAutoscaler
+4. metadata:
+5.   name: {{ include "tpt-daemon.fullname" . }}
+6.   labels:
+7.     {{- include "tpt-daemon.labels" . | nindent 4 }}
+8. spec:
+9.   scaleTargetRef:
+10.     apiVersion: apps/v1
+11.     kind: Deployment
+12.     name: {{ include "tpt-daemon.fullname" . }}
+13.   minReplicas: {{ .Values.autoscaling.minReplicas }}
+14.   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+15.   metrics:
+16.     - type: Resource
+17.       resource:
+18.         name: cpu
+19.         target:
+20.           type: Utilization
+21.           averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+22. {{- end }}

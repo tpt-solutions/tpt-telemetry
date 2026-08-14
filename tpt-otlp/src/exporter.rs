@@ -142,6 +142,18 @@ impl Exporter {
                 Ok(_) => return Ok(()),
                 Err(e) => {
                     if attempt >= self.config.max_retries {
+                        // Log the failure for operators. The error string is
+                        // sanitized (it never echoes request headers/secret
+                        // values); we deliberately do not log `self.config` or
+                        // any header content here.
+                        tracing::warn!(
+                            target: "tpt_otlp::exporter",
+                            transport = "http",
+                            endpoint = %self.config.endpoint,
+                            attempt,
+                            error = %e,
+                            "OTLP HTTP export failed after retries"
+                        );
                         return Err(OtlpError::RetriesExhausted(
                             self.config.max_retries,
                             e.to_string(),
@@ -286,6 +298,63 @@ mod tests {
         assert!(
             !msg.contains(sentinel),
             "secret header value leaked into transport error: {msg}"
+        );
+    }
+
+    #[test]
+    fn transport_warn_logs_do_not_leak_headers() {
+        // The export path logs failures via `tracing::warn!`; those log lines
+        // must never echo secret header values (mirrors
+        // `debug_redacts_header_values`). Capture the emitted log stream and
+        // assert the sentinel token is absent.
+        use std::io::Write;
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct CaptureWriter(Arc<Mutex<Vec<u8>>>);
+        impl Write for CaptureWriter {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer({
+                let buf = Arc::clone(&buf);
+                move || CaptureWriter(Arc::clone(&buf))
+            })
+            .with_target(false)
+            .with_max_level(tracing::Level::TRACE)
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let sentinel = "do-not-leak-this-token-67890";
+        let cfg = ExporterConfig {
+            transport: Transport::Http,
+            endpoint: "http://127.0.0.1:1".into(),
+            headers: vec![("Authorization".into(), format!("Bearer {sentinel}"))]
+                .into_iter()
+                .collect(),
+            max_retries: 0,
+            timeout_ms: 200,
+            ..Default::default()
+        };
+        let e = Exporter::new(cfg);
+        let rec = Record {
+            format: "X",
+            fields: vec![],
+        };
+        let _ = e.export(std::slice::from_ref(&rec));
+
+        let logs = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        assert!(
+            !logs.contains(sentinel),
+            "secret header value leaked into warn logs: {logs}"
         );
     }
 }

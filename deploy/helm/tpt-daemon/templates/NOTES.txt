@@ -1,0 +1,19 @@
+{{ .Values.image.repository | splitList "/" | last }}:{{ .Chart.AppVersion }} deployed.
+
+1. Forward syslog locally (optional):
+   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "tpt-daemon.fullname" . }} {{ .Values.service.udpPort }}:{{ .Values.service.udpPort }}/UDP
+   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "tpt-daemon.fullname" . }} {{ .Values.service.tcpPort }}:{{ .Values.service.tcpPort }}
+
+2. Scrape metrics (restricted by NetworkPolicy to allowed pods):
+   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "tpt-daemon.fullname" . }} {{ .Values.service.metricsPort }}:{{ .Values.service.metricsPort }}
+   curl http://127.0.0.1:{{ .Values.service.metricsPort }}/metrics
+
+3. Validate config in a running pod:
+   kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "tpt-daemon.fullname" . }} -- \
+     /usr/local/bin/tpt-daemon --check --config /etc/tpt-daemon/tpt-daemon.toml
+
+Config:        {{ include "tpt-daemon.fullname" . }}-config   (ConfigMap)
+Schema:        {{ include "tpt-daemon.fullname" . }}-schema   (ConfigMap)
+{{- if gt (len .Values.secretEnv) 0 }}
+Secrets:       {{ include "tpt-daemon.secretName" . }}        (Secret)
+{{- end }}

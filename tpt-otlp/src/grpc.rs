@@ -129,10 +129,19 @@ pub fn export_grpc(exporter: &Exporter, payload: &LogsPayload) -> Result<(), Otl
             grpc_req.metadata_mut().insert(key, mv);
         }
 
-        client
-            .export(grpc_req)
-            .await
-            .map_err(|e| OtlpError::Transport(e.to_string()))?;
+        client.export(grpc_req).await.map_err(|e| {
+            // Log the failure for operators. `e.to_string()` is sanitized (it
+            // never echoes gRPC metadata/secret header values); we deliberately
+            // do not log `exporter.config` or any header content here.
+            tracing::warn!(
+                target: "tpt_otlp::grpc",
+                transport = "grpc",
+                endpoint = %exporter.config.endpoint,
+                error = %e,
+                "OTLP gRPC export failed"
+            );
+            OtlpError::Transport(e.to_string())
+        })?;
         Ok(())
     })
 }

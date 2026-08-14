@@ -1,0 +1,45 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tpt-daemon.fullname" . }}-syslog
+  labels:
+    {{- include "tpt-daemon.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "tpt-daemon.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Syslog is open to the whole namespace (typical for a log receiver).
+    - ports:
+        - port: syslog-udp
+          protocol: UDP
+        - port: syslog-tcp
+          protocol: TCP
+{{- if .Values.networkPolicy.metrics.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tpt-daemon.fullname" . }}-metrics
+  labels:
+    {{- include "tpt-daemon.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "tpt-daemon.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # The unauthenticated /metrics + /healthz endpoint is restricted to the
+    # allowed scrapeers (e.g. Prometheus) only.
+    - from:
+        - podSelector:
+            {{- toYaml .Values.networkPolicy.metrics.allowedPodSelector | nindent 12 }}
+      ports:
+        - port: metrics
+          protocol: TCP
+{{- end }}
+{{- end }}

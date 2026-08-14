@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tpt-daemon.fullname" . }}
+  labels:
+    {{- include "tpt-daemon.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "tpt-daemon.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tpt-daemon.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "tpt-daemon.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "tpt-daemon.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--config"
+            - "/etc/tpt-daemon/tpt-daemon.toml"
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: syslog-udp
+              containerPort: {{ .Values.config.syslog.udp.bind | splitList ":" | last | int }}
+              protocol: UDP
+            - name: syslog-tcp
+              containerPort: {{ .Values.config.syslog.tcp.bind | splitList ":" | last | int }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.config.metrics.bind | splitList ":" | last | int }}
+              protocol: TCP
+          env:
+            {{- range $k, $v := .Values.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- if gt (len .Values.secretEnv) 0 }}
+            {{- range $k, $v := .Values.secretEnv }}
+            - name: {{ $k }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tpt-daemon.secretName" $ }}
+                  key: {{ $k }}
+            {{- end }}
+            {{- end }}
+          livenessProbe:
+            exec:
+              command:
+                - "/usr/local/bin/tpt-daemon"
+                - "--healthcheck"
+                - "--config"
+                - "/etc/tpt-daemon/tpt-daemon.toml"
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+                - "/usr/local/bin/tpt-daemon"
+                - "--healthcheck"
+                - "--config"
+                - "/etc/tpt-daemon/tpt-daemon.toml"
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tpt-daemon/tpt-daemon.toml
+              subPath: tpt-daemon.toml
+              readOnly: true
+            - name: schema
+              mountPath: /etc/tpt-daemon/{{ .Values.schema.filename }}
+              subPath: {{ .Values.schema.filename }}
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "tpt-daemon.fullname" . }}-config
+        - name: schema
+          configMap:
+            name: {{ include "tpt-daemon.fullname" . }}-schema
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
